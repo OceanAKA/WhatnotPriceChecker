@@ -305,6 +305,22 @@
       // Show what the AI read right away; prices fill in when they arrive.
       renderSeen(card, frame.image);
       showTimings(t);
+      // Without a strong GPU, Chrome runs its on-device model on the CPU, which is very slow.
+      if (/on-device/i.test(card.model || "") && t.ai > 10000) {
+        const tip = document.createElement("div");
+        tip.className = "wnpc-reason";
+        tip.textContent = "On-device AI is slow on this computer. A free Gemini key is much faster: ";
+        const link = document.createElement("a");
+        link.href = "#";
+        link.className = "wnpc-link";
+        link.textContent = "Settings";
+        link.addEventListener("click", (e) => {
+          e.preventDefault();
+          openOptions();
+        });
+        tip.appendChild(link);
+        seen.querySelector(".wnpc-seen-info").appendChild(tip);
+      }
       results.innerHTML = "";
       if (!card.card_visible || !card.name) {
         status.textContent = "No card in view. Scan again when the seller holds one up.";

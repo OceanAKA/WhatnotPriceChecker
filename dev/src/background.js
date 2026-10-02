@@ -13,7 +13,7 @@ import { identifyCardGemini } from "./gemini.js";
 import { identifyCardOnDevice, onDeviceStatus, warmUpOnDevice } from "./ondevice.js";
 import { identifyCardViaService, serviceConfigured, gradedViaService } from "./service.js";
 import { parseGrade, fetchGradedCard, pickGradedPrice, ebaySoldUrl } from "./graded.js";
-import { searchCards, parseTitle, setPriceApiKey } from "./prices.js";
+import { searchCards, parseTitleWithSet, setPriceApiKey } from "./prices.js";
 import { setTcgcsvBase, normalizeNumber } from "./tcgcsv.js";
 import { SERVICE_URL } from "./config.js";
 
@@ -272,7 +272,7 @@ async function handle(msg, sender) {
       return { ok: true, warmed: mode === "auto" && (await warmUpOnDevice().catch(() => false)) };
     }
     case "searchText": {
-      const parsed = parseTitle(msg.text);
+      const parsed = await parseTitleWithSet(msg.text);
       if (!parsed.name) return { ok: false, error: "Couldn't find a card name in that text." };
       const result = await searchCards(parsed);
       return { ok: true, parsed, cards: result.cards };

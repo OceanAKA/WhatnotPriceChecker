@@ -3,7 +3,19 @@
 // pokemontcg.io no longer has prices for new sets. Results come back in one
 // display shape: {id, name, number, rarity, setName, image, url, prices[], ...}.
 
-import { tcgcsvPrice, tcgcsvSearch, tcgcsvSearchByName, normalizeNumber, JAPANESE } from "./tcgcsv.js";
+import { tcgcsvPrice, tcgcsvSearch, tcgcsvSearchByName, findSetInText, normalizeNumber, ENGLISH, JAPANESE } from "./tcgcsv.js";
+
+const POKEMONTCG_BUDGET_MS = 10000;
+
+function withTimeout(promise, ms) {
+  let timer;
+  return Promise.race([
+    promise,
+    new Promise((_, reject) => {
+      timer = setTimeout(() => reject(new Error("timed out")), ms);
+    }),
+  ]).finally(() => clearTimeout(timer));
+}
 
 const API = "https://api.pokemontcg.io/v2/cards";
 const SELECT = "id,name,number,rarity,set,images,tcgplayer,cardmarket";
@@ -78,6 +90,10 @@ export async function searchCards(card) {
   if (/japan/i.test(card.language || "")) {
     let cards = await tcgcsvSearch(card, JAPANESE).catch(() => []);
     // The AI often misreads small Japanese set codes; find the card by name instead.
+    if (!cards.hasExact && normalizeNumber(card.number)) {
+      const byName = await tcgcsvSearchByName(card, JAPANESE, { exactNumberOnly: true }).catch(() => []);
+      if (byName.length) cards = byName;
+    }
     if (!cards.length) cards = await tcgcsvSearchByName(card, JAPANESE).catch(() => []);
     if (cards.length) {
       const result = { cards, language: "Japanese" };
@@ -87,20 +103,32 @@ export async function searchCards(card) {
     // Not found in the Japanese catalog: fall through to the English printing.
   }
 
+  const done = (cards) => {
+    const result = { cards };
+    cache.set(key, { at: Date.now(), result });
+    return result;
+  };
+
   // TCGCSV is fast and reliable, so whenever the AI read a set, try it first.
+  let direct = [];
   if (card.setCode || card.setName) {
-    const direct = await tcgcsvSearch(card).catch(() => []);
-    if (direct.length) {
-      const result = { cards: direct };
-      cache.set(key, { at: Date.now(), result });
-      return result;
-    }
+    direct = await tcgcsvSearch(card).catch(() => []);
+    if (direct.hasExact || (direct.length && !normalizeNumber(card.number))) return done(direct);
   }
 
+  // Set misread or not given (typed searches too): look the card up by name and
+  // number across recent sets. Only trusted when the number matches exactly.
+  const byName = await tcgcsvSearchByName(card, ENGLISH, { exactNumberOnly: true }).catch(() => []);
+  if (byName.length) return done(byName);
+  // The set was right but the number wasn't found: that set's printings of the card.
+  if (direct.length) return done(direct);
+
+  // Last resort, mainly for older sets: pokemontcg.io, which is slow and often
+  // errors, so it gets a time limit.
   let found = [];
   let identifyError = null;
   try {
-    found = (await identifyCards(card)).cards.slice(0, MAX_RESULTS);
+    found = (await withTimeout(identifyCards(card), POKEMONTCG_BUDGET_MS)).cards.slice(0, MAX_RESULTS);
   } catch (e) {
     identifyError = e;
   }
@@ -109,8 +137,8 @@ export async function searchCards(card) {
   if (found.length) {
     cards = await Promise.all(found.map(priceCard));
   } else {
-    // pokemontcg.io is down or didn't know the card: try TCGCSV directly with the set name the AI read.
-    cards = await tcgcsvSearch(card).catch(() => []);
+    // Nothing exact: show any recent printings with this name rather than nothing.
+    cards = await tcgcsvSearchByName(card, ENGLISH).catch(() => []);
     if (!cards.length && identifyError) {
       throw new Error("The card database isn't responding. Try again in a moment.");
     }
@@ -188,6 +216,18 @@ async function identifyCards(card) {
   }
   if (lastError) throw lastError;
   return { cards: [], query: attempts[attempts.length - 1] };
+}
+
+/** parseTitle plus a set name recognized in the text, which lets typed searches use the fast path. */
+export async function parseTitleWithSet(raw) {
+  const parsed = parseTitle(raw);
+  const set = await findSetInText(raw).catch(() => null);
+  if (set) {
+    parsed.setName = set.name;
+    const rest = parsed.name.split(" ").filter((w) => !set.words.has(w.toLowerCase().replace(/[^a-z0-9]/g, "")));
+    if (rest.length) parsed.name = rest.join(" ");
+  }
+  return parsed;
 }
 
 // Turn a typed or pasted listing title into {name, number, setTotal}.

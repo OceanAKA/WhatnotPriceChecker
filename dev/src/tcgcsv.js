@@ -4,7 +4,7 @@
 
 const DIRECT = "https://tcgcsv.com/tcgplayer";
 // TCGCSV asks every client to identify itself and blocks anonymous requests.
-export const USER_AGENT = "WhatnotPriceChecker/3.2.1 (+https://github.com/OceanAKA/WhatnotPriceChecker)";
+export const USER_AGENT = "WhatnotPriceChecker/3.2.2 (+https://github.com/OceanAKA/WhatnotPriceChecker)";
 let base = DIRECT;
 
 /** Route requests through the card-ID service's cached TCGCSV proxy (TCGCSV is meant for server-side use). */
@@ -82,10 +82,22 @@ function productRarity(p) {
   return e ? e.value : "";
 }
 
+// Edit distance of at most one: the AI misreads tiny set codes ("PDR" for "POR").
+function oneOff(a, b) {
+  if (a === b) return true;
+  if (Math.abs(a.length - b.length) > 1 || Math.min(a.length, b.length) < 3) return false;
+  let i = 0;
+  while (i < a.length && i < b.length && a[i] === b[i]) i++;
+  return a.slice(i + 1) === b.slice(i + 1) || a.slice(i) === b.slice(i + 1) || a.slice(i + 1) === b.slice(i);
+}
+
 function groupScore(g, { setName, setCode, releaseDate }) {
   let score = setName ? similarity(setName, g.name) : 0;
   // The printed set code ("MEW", "SV2a") is TCGplayer's group abbreviation: the strongest signal.
-  if (setCode && (g.abbreviation || "").toLowerCase() === setCode.toLowerCase()) score += 2;
+  const code = (setCode || "").toLowerCase();
+  const abbr = (g.abbreviation || "").toLowerCase();
+  if (code && abbr === code) score += 2;
+  else if (code && abbr && oneOff(abbr, code)) score += 1; // name + number must still match, so near-misses are safe
   const day = releaseDate ? releaseDate.replace(/\//g, "-").slice(0, 10) : "";
   if (day && (g.publishedOn || "").slice(0, 10) === day) score += 1;
   return score;
@@ -171,8 +183,9 @@ const RECENT_DAYS = 730;
  * the printed number matches. First use downloads each recent set's card list
  * (cached afterwards), so this is only a fallback.
  */
-export async function tcgcsvSearchByName({ name, number, setTotal }, cat = ENGLISH) {
+export async function tcgcsvSearchByName({ name, number, setTotal }, cat = ENGLISH, { exactNumberOnly = false } = {}) {
   if (!name) return [];
+  if (exactNumberOnly && !normalizeNumber(number)) return [];
   const cutoff = Date.now() - RECENT_DAYS * 864e5;
   const recent = (await groups(cat)).filter((g) => Date.parse(g.publishedOn) >= cutoff);
   const want = normalizeNumber(number);
@@ -194,7 +207,8 @@ export async function tcgcsvSearchByName({ name, number, setTotal }, cat = ENGLI
     if (total && parseInt(d, 10) === total) sc += 1;
     return sc;
   };
-  return found.sort((a, b) => score(b) - score(a)).slice(0, 8);
+  const ranked = found.sort((a, b) => score(b) - score(a));
+  return (exactNumberOnly ? ranked.filter((c) => score(c) >= 2) : ranked).slice(0, 8);
 }
 
 /** Price one English card identified by pokemontcg.io (set name + release date + number). */
@@ -214,12 +228,15 @@ export async function tcgcsvSearch({ name, number, setName, setCode, setTotal },
   if (!name || (!setName && !setCode)) return [];
   const exacts = [];
   const others = [];
-  for (const g of await rankGroups(cat, { setName, setCode }, 3)) {
-    const hit = await findProducts(cat, g.groupId, name, number);
+  const candidates = await rankGroups(cat, { setName, setCode }, 6);
+  const hits = await Promise.all(candidates.map((g) => findProducts(cat, g.groupId, name, number).catch(() => null)));
+  candidates.forEach((g, i) => {
+    const hit = hits[i];
+    if (!hit) return;
     if (hit.exact) exacts.push(toCard(g, hit.exact.product, hit.exact.rows));
     // Only the best-matching set's other printings; later sets are weaker guesses.
     if (!others.length) others.push(...hit.others.map((o) => toCard(g, o.product, o.rows)));
-  }
+  });
   // Prefer the printing whose "/total" matches what was read off the card.
   const total = parseInt(setTotal, 10);
   if (total) {
@@ -227,5 +244,23 @@ export async function tcgcsvSearch({ name, number, setName, setCode, setTotal },
     exacts.sort((a, b) => (denom(b) === total) - (denom(a) === total));
   }
   const seen = new Set();
-  return [...exacts, ...others].filter((c) => !seen.has(c.productId) && seen.add(c.productId)).slice(0, 8);
+  const out = [...exacts, ...others].filter((c) => !seen.has(c.productId) && seen.add(c.productId)).slice(0, 8);
+  out.hasExact = exacts.length > 0; // false: only other printings of that name in the matched sets
+  return out;
+}
+
+/**
+ * Find a set name inside typed text ("umbreon vmax 215/203 evolving skies"),
+ * using TCGplayer's set list. Returns the set's name and the words it used.
+ */
+export async function findSetInText(text, cat = ENGLISH) {
+  const have = words(text);
+  let best = null;
+  for (const g of await groups(cat)) {
+    const w = words(g.name);
+    if (w.size < 1 || [...w].every((x) => /^\d+$/.test(x))) continue;
+    if (![...w].every((x) => have.has(x))) continue;
+    if (!best || w.size > best.words.size) best = { name: g.name, words: w };
+  }
+  return best;
 }

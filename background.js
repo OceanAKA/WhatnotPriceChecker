@@ -17806,7 +17806,7 @@ Identify the card in this frame.` : "Identify the card in this frame.";
 
   // src/tcgcsv.js
   var DIRECT = "https://tcgcsv.com/tcgplayer";
-  var USER_AGENT = "WhatnotPriceChecker/3.2.1 (+https://github.com/OceanAKA/WhatnotPriceChecker)";
+  var USER_AGENT = "WhatnotPriceChecker/3.2.2 (+https://github.com/OceanAKA/WhatnotPriceChecker)";
   var base = DIRECT;
   function setTcgcsvBase(url) {
     base = url || DIRECT;
@@ -17863,9 +17863,19 @@ Identify the card in this frame.` : "Identify the card in this frame.";
     const e = (p.extendedData || []).find((x) => x.name === "Rarity");
     return e ? e.value : "";
   }
+  function oneOff(a, b) {
+    if (a === b) return true;
+    if (Math.abs(a.length - b.length) > 1 || Math.min(a.length, b.length) < 3) return false;
+    let i = 0;
+    while (i < a.length && i < b.length && a[i] === b[i]) i++;
+    return a.slice(i + 1) === b.slice(i + 1) || a.slice(i) === b.slice(i + 1) || a.slice(i + 1) === b.slice(i);
+  }
   function groupScore(g, { setName, setCode, releaseDate }) {
     let score = setName ? similarity(setName, g.name) : 0;
-    if (setCode && (g.abbreviation || "").toLowerCase() === setCode.toLowerCase()) score += 2;
+    const code = (setCode || "").toLowerCase();
+    const abbr = (g.abbreviation || "").toLowerCase();
+    if (code && abbr === code) score += 2;
+    else if (code && abbr && oneOff(abbr, code)) score += 1;
     const day = releaseDate ? releaseDate.replace(/\//g, "-").slice(0, 10) : "";
     if (day && (g.publishedOn || "").slice(0, 10) === day) score += 1;
     return score;
@@ -17923,8 +17933,9 @@ Identify the card in this frame.` : "Identify the card in this frame.";
     };
   }
   var RECENT_DAYS2 = 730;
-  async function tcgcsvSearchByName({ name, number, setTotal }, cat = ENGLISH) {
+  async function tcgcsvSearchByName({ name, number, setTotal }, cat = ENGLISH, { exactNumberOnly = false } = {}) {
     if (!name) return [];
+    if (exactNumberOnly && !normalizeNumber(number)) return [];
     const cutoff = Date.now() - RECENT_DAYS2 * 864e5;
     const recent = (await groups(cat)).filter((g) => Date.parse(g.publishedOn) >= cutoff);
     const want = normalizeNumber(number);
@@ -17946,7 +17957,8 @@ Identify the card in this frame.` : "Identify the card in this frame.";
       if (total && parseInt(d, 10) === total) sc += 1;
       return sc;
     };
-    return found.sort((a, b) => score(b) - score(a)).slice(0, 8);
+    const ranked = found.sort((a, b) => score(b) - score(a));
+    return (exactNumberOnly ? ranked.filter((c) => score(c) >= 2) : ranked).slice(0, 8);
   }
   async function tcgcsvPrice({ name, number, setName, releaseDate }) {
     const [group] = await rankGroups(ENGLISH, { setName, releaseDate }, 1);
@@ -17958,21 +17970,47 @@ Identify the card in this frame.` : "Identify the card in this frame.";
     if (!name || !setName && !setCode) return [];
     const exacts = [];
     const others = [];
-    for (const g of await rankGroups(cat, { setName, setCode }, 3)) {
-      const hit = await findProducts(cat, g.groupId, name, number);
+    const candidates = await rankGroups(cat, { setName, setCode }, 6);
+    const hits = await Promise.all(candidates.map((g) => findProducts(cat, g.groupId, name, number).catch(() => null)));
+    candidates.forEach((g, i) => {
+      const hit = hits[i];
+      if (!hit) return;
       if (hit.exact) exacts.push(toCard(g, hit.exact.product, hit.exact.rows));
       if (!others.length) others.push(...hit.others.map((o) => toCard(g, o.product, o.rows)));
-    }
+    });
     const total = parseInt(setTotal, 10);
     if (total) {
       const denom = (c) => parseInt(String(c.number).split("/")[1], 10);
       exacts.sort((a, b) => (denom(b) === total) - (denom(a) === total));
     }
     const seen = /* @__PURE__ */ new Set();
-    return [...exacts, ...others].filter((c) => !seen.has(c.productId) && seen.add(c.productId)).slice(0, 8);
+    const out = [...exacts, ...others].filter((c) => !seen.has(c.productId) && seen.add(c.productId)).slice(0, 8);
+    out.hasExact = exacts.length > 0;
+    return out;
+  }
+  async function findSetInText(text, cat = ENGLISH) {
+    const have = words(text);
+    let best = null;
+    for (const g of await groups(cat)) {
+      const w = words(g.name);
+      if (w.size < 1 || [...w].every((x) => /^\d+$/.test(x))) continue;
+      if (![...w].every((x) => have.has(x))) continue;
+      if (!best || w.size > best.words.size) best = { name: g.name, words: w };
+    }
+    return best;
   }
 
   // src/prices.js
+  var POKEMONTCG_BUDGET_MS = 1e4;
+  function withTimeout2(promise, ms) {
+    let timer;
+    return Promise.race([
+      promise,
+      new Promise((_, reject) => {
+        timer = setTimeout(() => reject(new Error("timed out")), ms);
+      })
+    ]).finally(() => clearTimeout(timer));
+  }
   var API = "https://api.pokemontcg.io/v2/cards";
   var SELECT = "id,name,number,rarity,set,images,tcgplayer,cardmarket";
   var priceApiKey = "";
@@ -18025,6 +18063,10 @@ Identify the card in this frame.` : "Identify the card in this frame.";
     if (hit && Date.now() - hit.at < CACHE_TTL_MS) return { ...hit.result, cached: true };
     if (/japan/i.test(card.language || "")) {
       let cards2 = await tcgcsvSearch(card, JAPANESE).catch(() => []);
+      if (!cards2.hasExact && normalizeNumber(card.number)) {
+        const byName2 = await tcgcsvSearchByName(card, JAPANESE, { exactNumberOnly: true }).catch(() => []);
+        if (byName2.length) cards2 = byName2;
+      }
       if (!cards2.length) cards2 = await tcgcsvSearchByName(card, JAPANESE).catch(() => []);
       if (cards2.length) {
         const result2 = { cards: cards2, language: "Japanese" };
@@ -18032,18 +18074,23 @@ Identify the card in this frame.` : "Identify the card in this frame.";
         return result2;
       }
     }
+    const done = (cards2) => {
+      const result2 = { cards: cards2 };
+      cache.set(key, { at: Date.now(), result: result2 });
+      return result2;
+    };
+    let direct = [];
     if (card.setCode || card.setName) {
-      const direct = await tcgcsvSearch(card).catch(() => []);
-      if (direct.length) {
-        const result2 = { cards: direct };
-        cache.set(key, { at: Date.now(), result: result2 });
-        return result2;
-      }
+      direct = await tcgcsvSearch(card).catch(() => []);
+      if (direct.hasExact || direct.length && !normalizeNumber(card.number)) return done(direct);
     }
+    const byName = await tcgcsvSearchByName(card, ENGLISH, { exactNumberOnly: true }).catch(() => []);
+    if (byName.length) return done(byName);
+    if (direct.length) return done(direct);
     let found = [];
     let identifyError = null;
     try {
-      found = (await identifyCards(card)).cards.slice(0, MAX_RESULTS);
+      found = (await withTimeout2(identifyCards(card), POKEMONTCG_BUDGET_MS)).cards.slice(0, MAX_RESULTS);
     } catch (e) {
       identifyError = e;
     }
@@ -18051,7 +18098,7 @@ Identify the card in this frame.` : "Identify the card in this frame.";
     if (found.length) {
       cards = await Promise.all(found.map(priceCard));
     } else {
-      cards = await tcgcsvSearch(card).catch(() => []);
+      cards = await tcgcsvSearchByName(card, ENGLISH).catch(() => []);
       if (!cards.length && identifyError) {
         throw new Error("The card database isn't responding. Try again in a moment.");
       }
@@ -18121,6 +18168,16 @@ Identify the card in this frame.` : "Identify the card in this frame.";
     }
     if (lastError) throw lastError;
     return { cards: [], query: attempts[attempts.length - 1] };
+  }
+  async function parseTitleWithSet(raw) {
+    const parsed = parseTitle(raw);
+    const set = await findSetInText(raw).catch(() => null);
+    if (set) {
+      parsed.setName = set.name;
+      const rest = parsed.name.split(" ").filter((w) => !set.words.has(w.toLowerCase().replace(/[^a-z0-9]/g, "")));
+      if (rest.length) parsed.name = rest.join(" ");
+    }
+    return parsed;
   }
   function parseTitle(raw) {
     let s = " " + (raw || "").toLowerCase() + " ";
@@ -18356,7 +18413,7 @@ Identify the card in this frame.` : "Identify the card in this frame.";
         return { ok: true, warmed: mode === "auto" && await warmUpOnDevice().catch(() => false) };
       }
       case "searchText": {
-        const parsed = parseTitle(msg.text);
+        const parsed = await parseTitleWithSet(msg.text);
         if (!parsed.name) return { ok: false, error: "Couldn't find a card name in that text." };
         const result = await searchCards(parsed);
         return { ok: true, parsed, cards: result.cards };
