@@ -1,0 +1,16 @@
+{
+  "name": "whatnot-price-checker",
+  "private": true,
+  "version": "2.0.0",
+  "type": "module",
+  "scripts": {
+    "build": "esbuild src/background.js --bundle --format=iife --platform=browser --target=chrome120 --outfile=extension/background.js",
+    "test:prices": "node test/prices.test.js"
+  },
+  "dependencies": {
+    "@anthropic-ai/sdk": "latest"
+  },
+  "devDependencies": {
+    "esbuild": "^0.25.0"
+  }
+}

@@ -1,0 +1,333 @@
+#wn-price-checker {
+  position: fixed;
+  right: 16px;
+  bottom: 16px;
+  width: 340px;
+  max-height: 70vh;
+  display: flex;
+  flex-direction: column;
+  z-index: 2147483647;
+  background: #17181c;
+  color: #e8e8ea;
+  border: 1px solid #33353d;
+  border-radius: 12px;
+  box-shadow: 0 8px 28px rgba(0, 0, 0, 0.55);
+  font: 13px/1.4 -apple-system, "Segoe UI", Roboto, Arial, sans-serif;
+  overflow: hidden;
+}
+
+#wn-price-checker * {
+  box-sizing: border-box;
+}
+
+.wnpc-header {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 8px 10px;
+  background: #1f2027;
+  cursor: grab;
+  user-select: none;
+}
+
+.wnpc-title {
+  font-weight: 700;
+  flex: 1;
+}
+
+.wnpc-auto {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  font-size: 12px;
+  color: #a8aab3;
+  cursor: pointer;
+}
+
+.wnpc-icon {
+  background: #2b2d36;
+  color: #e8e8ea;
+  border: none;
+  border-radius: 6px;
+  width: 24px;
+  height: 24px;
+  cursor: pointer;
+  font-size: 15px;
+  line-height: 1;
+}
+
+.wnpc-collapsed .wnpc-body {
+  display: none;
+}
+
+.wnpc-body {
+  display: flex;
+  flex-direction: column;
+  min-height: 0;
+  padding: 10px;
+  gap: 8px;
+}
+
+.wnpc-row {
+  display: flex;
+  gap: 6px;
+}
+
+#wnpc-input {
+  flex: 1;
+  min-width: 0;
+  padding: 7px 9px;
+  border: 1px solid #3a3c46;
+  border-radius: 8px;
+  background: #101116;
+  color: #e8e8ea;
+  outline: none;
+}
+
+#wnpc-input:focus {
+  border-color: #ffd53d;
+}
+
+.wnpc-row button {
+  padding: 7px 10px;
+  border: none;
+  border-radius: 8px;
+  background: #ffd53d;
+  color: #1a1a1a;
+  font-weight: 700;
+  cursor: pointer;
+  white-space: nowrap;
+}
+
+.wnpc-row button#wnpc-detect {
+  background: #2b2d36;
+  color: #e8e8ea;
+}
+
+.wnpc-row button:hover {
+  filter: brightness(1.1);
+}
+
+.wnpc-status {
+  color: #a8aab3;
+  font-size: 12px;
+}
+
+.wnpc-results {
+  overflow-y: auto;
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.wnpc-card {
+  display: flex;
+  gap: 10px;
+  padding: 8px;
+  background: #1d1e25;
+  border: 1px solid #2c2e37;
+  border-radius: 10px;
+}
+
+.wnpc-img {
+  width: 64px;
+  height: auto;
+  align-self: flex-start;
+  border-radius: 4px;
+  flex-shrink: 0;
+}
+
+.wnpc-info {
+  flex: 1;
+  min-width: 0;
+}
+
+.wnpc-name {
+  font-weight: 700;
+}
+
+.wnpc-num {
+  color: #a8aab3;
+  font-weight: 400;
+}
+
+.wnpc-set {
+  color: #a8aab3;
+  font-size: 11px;
+  margin-bottom: 5px;
+}
+
+.wnpc-updated {
+  color: #6f717c;
+}
+
+.wnpc-variant {
+  display: flex;
+  align-items: baseline;
+  gap: 6px;
+  padding: 1px 0;
+}
+
+.wnpc-vname {
+  flex: 1;
+  min-width: 0;
+  color: #c9cbd4;
+  font-size: 12px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.wnpc-market {
+  font-weight: 700;
+  color: #7ee787;
+}
+
+.wnpc-range {
+  color: #8b8d98;
+  font-size: 11px;
+}
+
+.wnpc-link {
+  display: inline-block;
+  margin-top: 4px;
+  color: #ffd53d;
+  font-size: 12px;
+  text-decoration: none;
+}
+
+.wnpc-link:hover {
+  text-decoration: underline;
+}
+
+.wnpc-foot {
+  color: #6f717c;
+  font-size: 10px;
+  text-align: center;
+}
+
+#wn-price-checker [hidden] {
+  display: none !important;
+}
+
+.wnpc-settings {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  padding: 8px;
+  background: #1d1e25;
+  border: 1px solid #2c2e37;
+  border-radius: 10px;
+}
+
+.wnpc-label {
+  font-weight: 700;
+  font-size: 12px;
+}
+
+.wnpc-hint {
+  color: #8b8d98;
+  font-size: 11px;
+}
+
+#wnpc-key {
+  flex: 1;
+  min-width: 0;
+  padding: 7px 9px;
+  border: 1px solid #3a3c46;
+  border-radius: 8px;
+  background: #101116;
+  color: #e8e8ea;
+  outline: none;
+}
+
+.wnpc-settings button {
+  padding: 7px 10px;
+  border: none;
+  border-radius: 8px;
+  background: #ffd53d;
+  color: #1a1a1a;
+  font-weight: 700;
+  cursor: pointer;
+}
+
+.wnpc-scan {
+  width: 100%;
+  padding: 10px;
+  border: none;
+  border-radius: 10px;
+  background: #ffd53d;
+  color: #1a1a1a;
+  font-size: 14px;
+  font-weight: 800;
+  cursor: pointer;
+}
+
+.wnpc-scan:hover {
+  filter: brightness(1.08);
+}
+
+.wnpc-scan:disabled {
+  opacity: 0.6;
+  cursor: progress;
+}
+
+.wnpc-row button#wnpc-search {
+  background: #2b2d36;
+  color: #e8e8ea;
+}
+
+.wnpc-seen {
+  display: flex;
+  gap: 10px;
+  padding: 8px;
+  background: #22201a;
+  border: 1px solid #4a4128;
+  border-radius: 10px;
+}
+
+.wnpc-thumb {
+  width: 56px;
+  height: 56px;
+  object-fit: cover;
+  border-radius: 6px;
+  flex-shrink: 0;
+}
+
+.wnpc-seen-info {
+  flex: 1;
+  min-width: 0;
+}
+
+.wnpc-seen-label {
+  color: #a8aab3;
+  font-size: 11px;
+}
+
+.wnpc-seen-name {
+  font-weight: 800;
+  font-size: 14px;
+}
+
+.wnpc-seen-sub {
+  color: #a8aab3;
+  font-size: 11px;
+}
+
+.wnpc-conf {
+  margin-left: 4px;
+  padding: 0 5px;
+  border-radius: 4px;
+  font-size: 10px;
+  font-weight: 700;
+}
+
+.wnpc-conf-high { background: #1f3d26; color: #7ee787; }
+.wnpc-conf-medium { background: #3d361f; color: #ffd53d; }
+.wnpc-conf-low { background: #3d1f1f; color: #ff8a80; }
+
+.wnpc-warn {
+  margin-top: 3px;
+  color: #ffb86b;
+  font-size: 11px;
+}
