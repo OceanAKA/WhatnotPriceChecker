@@ -4,7 +4,7 @@ A Chrome extension that reads the Pokémon card a seller is holding up on a
 Whatnot live stream and shows its market price, so you can tell in seconds
 whether the current bid is a deal.
 
-**[Add to Chrome from the Chrome Web Store](https://chromewebstore.google.com/detail/mddcgfkjoflagiogdklhlailjicleepa)** · or
+**[Add to Chrome from the Chrome Web Store](https://chromewebstore.google.com/detail/ipnheelahlheggemeckmlbckkbfpjboh)** · or
 [download the latest release](https://github.com/OceanAKA/WhatnotPriceChecker/releases/latest)
 
 ## What it does
@@ -111,7 +111,7 @@ esbuild: an MV3 service worker cannot import npm packages directly.
 ## Quick start
 
 Requires Google Chrome. The easiest way is to install it from the
-[Chrome Web Store](https://chromewebstore.google.com/detail/mddcgfkjoflagiogdklhlailjicleepa). To load it from source instead (Node.js is only
+[Chrome Web Store](https://chromewebstore.google.com/detail/ipnheelahlheggemeckmlbckkbfpjboh). To load it from source instead (Node.js is only
 needed if you change the code; `background.js` is already built and committed):
 
 1. Download `whatnot-price-checker-*.zip` from the
