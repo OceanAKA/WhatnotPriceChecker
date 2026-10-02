@@ -1,4 +1,4 @@
-# Whatnot Pokémon Card Price Checker
+# Card Price Checker for Whatnot
 
 A Chrome extension that reads the Pokémon card a seller is holding up on a
 Whatnot live stream and shows its market price, so you can tell in seconds

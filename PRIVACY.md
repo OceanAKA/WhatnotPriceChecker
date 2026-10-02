@@ -1,4 +1,4 @@
-# Privacy Policy: Whatnot Pokémon Card Price Checker
+# Privacy Policy: Card Price Checker for Whatnot
 
 _Last updated: October 1, 2026_
 

@@ -4,7 +4,7 @@
 
 const DIRECT = "https://tcgcsv.com/tcgplayer";
 // TCGCSV asks every client to identify itself and blocks anonymous requests.
-export const USER_AGENT = "WhatnotPriceChecker/3.2.0 (+https://github.com/OceanAKA/WhatnotPriceChecker)";
+export const USER_AGENT = "WhatnotPriceChecker/3.2.1 (+https://github.com/OceanAKA/WhatnotPriceChecker)";
 let base = DIRECT;
 
 /** Route requests through the card-ID service's cached TCGCSV proxy (TCGCSV is meant for server-side use). */
