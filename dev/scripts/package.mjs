@@ -7,7 +7,10 @@ import path from "node:path";
 
 const here = path.dirname(fileURLToPath(import.meta.url));
 const root = path.resolve(here, "../..");
-const FILES = ["manifest.json", "background.js", "content.js", "content.css", "options.html", "options.js", "options.css"];
+const FILES = [
+  "manifest.json", "background.js", "content.js", "content.css", "options.html", "options.js", "options.css",
+  "icons/icon16.png", "icons/icon32.png", "icons/icon48.png", "icons/icon128.png",
+];
 
 const version = JSON.parse(readFileSync(path.join(root, "manifest.json"), "utf8")).version;
 const out = path.resolve(here, `../dist/whatnot-price-checker-${version}.zip`);

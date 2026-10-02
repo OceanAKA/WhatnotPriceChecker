@@ -110,10 +110,12 @@ esbuild: an MV3 service worker cannot import npm packages directly.
 Requires Google Chrome. Node.js is only needed if you change the code;
 `background.js` is already built and committed.
 
-1. Clone this repo.
+1. Download `whatnot-price-checker-*.zip` from the
+   [latest release](https://github.com/OceanAKA/WhatnotPriceChecker/releases/latest)
+   and unzip it (or clone this repo).
 2. Open `chrome://extensions`, turn on **Developer mode** (top right), click
-   **Load unpacked**, and select the repo folder itself (the one containing
-   `manifest.json`).
+   **Load unpacked**, and select the unzipped folder (or the repo folder),
+   the one containing `manifest.json`.
 3. Open a Whatnot stream. The **Card Prices** panel appears in the bottom
    right.
 4. The Settings page opens on install (or click the gear ⚙ in the panel).

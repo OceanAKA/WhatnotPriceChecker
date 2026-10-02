@@ -2,14 +2,23 @@
   "manifest_version": 3,
   "name": "Whatnot Pokemon Card Price Checker",
   "version": "3.2.0",
-  "description": "Scan the Pokémon card on a Whatnot live stream and see its TCGPlayer and Cardmarket market price. Works without an API key.",
+  "description": "Scan the Pokémon card on a Whatnot stream and see its TCGplayer price, incl. Japanese cards and graded slabs. No API key needed.",
+  "icons": {
+    "16": "icons/icon16.png",
+    "32": "icons/icon32.png",
+    "48": "icons/icon48.png",
+    "128": "icons/icon128.png"
+  },
   "permissions": [
     "storage"
   ],
   "host_permissions": [
-    "<all_urls>",
+    "https://tcgcsv.com/*",
     "https://api.pokemontcg.io/*",
-    "https://api.anthropic.com/*"
+    "https://www.pokemonpricetracker.com/*",
+    "https://generativelanguage.googleapis.com/*",
+    "https://api.anthropic.com/*",
+    "https://*.workers.dev/*"
   ],
   "background": {
     "service_worker": "background.js"

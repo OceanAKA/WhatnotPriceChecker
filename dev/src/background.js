@@ -229,8 +229,13 @@ async function handle(msg, sender) {
   await loadPriceApiKey();
   switch (msg.type) {
     case "captureFrame": {
-      const image = await captureFrame(sender.tab.windowId, msg.rect, msg.dpr || 1);
-      return { ok: true, image };
+      // Fallback for streams whose video pixels can't be read directly.
+      try {
+        const image = await captureFrame(sender.tab.windowId, msg.rect, msg.dpr || 1);
+        return { ok: true, image };
+      } catch {
+        return { ok: false, error: "this stream's video can't be read. Try reloading the page." };
+      }
     }
     case "identify": {
       try {

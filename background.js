@@ -18315,8 +18315,12 @@ Identify the card in this frame.` : "Identify the card in this frame.";
     await loadPriceApiKey();
     switch (msg.type) {
       case "captureFrame": {
-        const image = await captureFrame(sender.tab.windowId, msg.rect, msg.dpr || 1);
-        return { ok: true, image };
+        try {
+          const image = await captureFrame(sender.tab.windowId, msg.rect, msg.dpr || 1);
+          return { ok: true, image };
+        } catch {
+          return { ok: false, error: "this stream's video can't be read. Try reloading the page." };
+        }
       }
       case "identify": {
         try {
