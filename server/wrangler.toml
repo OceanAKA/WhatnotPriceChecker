@@ -1,0 +1,34 @@
+name = "whatnot-card-id"
+main = "worker.js"
+compatibility_date = "2026-09-01"
+
+# Comma-separated extension origins allowed to call the service, e.g.
+# "chrome-extension://abcdefghijklmnopabcdefghijklmnop". Empty allows any origin.
+[vars]
+ALLOWED_ORIGINS = ""
+
+# Per-install and per-IP request limits (period must be 10 or 60 seconds).
+[[ratelimits]]
+name = "INSTALL_LIMITER"
+namespace_id = "1001"
+
+  [ratelimits.simple]
+  limit = 6
+  period = 60
+
+[[ratelimits]]
+name = "IP_LIMITER"
+namespace_id = "1002"
+
+  [ratelimits.simple]
+  limit = 20
+  period = 60
+
+# Price-data relay: a scan makes a few of these, so allow more than scans.
+[[ratelimits]]
+name = "PRICE_LIMITER"
+namespace_id = "1003"
+
+  [ratelimits.simple]
+  limit = 60
+  period = 60

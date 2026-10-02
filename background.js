@@ -182,7 +182,7 @@
   var node_browser_exports = {};
   __export(node_browser_exports, {
     child_process: () => child_process,
-    crypto: () => crypto,
+    crypto: () => crypto2,
     fs: () => fs,
     os: () => os,
     path: () => path,
@@ -198,12 +198,12 @@
       }
     });
   }
-  var child_process, crypto, fs, os, path, stream, util;
+  var child_process, crypto2, fs, os, path, stream, util;
   var init_node_browser = __esm({
     "node_modules/@anthropic-ai/sdk/internal/node.browser.mjs"() {
       init_error();
       child_process = /* @__PURE__ */ unavailable("child_process");
-      crypto = /* @__PURE__ */ unavailable("crypto");
+      crypto2 = /* @__PURE__ */ unavailable("crypto");
       fs = /* @__PURE__ */ unavailable("fs");
       os = /* @__PURE__ */ unavailable("os");
       path = /* @__PURE__ */ unavailable("path");
@@ -2246,13 +2246,13 @@
 
   // node_modules/@anthropic-ai/sdk/internal/utils/uuid.mjs
   var uuid4 = function() {
-    const { crypto: crypto2 } = globalThis;
-    if (crypto2?.randomUUID) {
-      uuid4 = crypto2.randomUUID.bind(crypto2);
-      return crypto2.randomUUID();
+    const { crypto: crypto3 } = globalThis;
+    if (crypto3?.randomUUID) {
+      uuid4 = crypto3.randomUUID.bind(crypto3);
+      return crypto3.randomUUID();
     }
     const u8 = new Uint8Array(1);
-    const randomByte = crypto2 ? () => crypto2.getRandomValues(u8)[0] : () => Math.random() * 255 & 255;
+    const randomByte = crypto3 ? () => crypto3.getRandomValues(u8)[0] : () => Math.random() * 255 & 255;
     return "10000000-1000-4000-8000-100000000000".replace(/[018]/g, (c) => (+c ^ randomByte() & 15 >> +c / 4).toString(16));
   };
 
@@ -3124,7 +3124,7 @@
     };
   }
   function createMiddlewareContext(options, client) {
-    const cache = /* @__PURE__ */ new WeakMap();
+    const cache2 = /* @__PURE__ */ new WeakMap();
     return {
       options,
       // Resolved per chain, so changes to the client's `logLevel`/`logger`
@@ -3134,10 +3134,10 @@
         if (options?.stream && response.ok) {
           return parseMiddlewareResponse(response, options, client);
         }
-        let parsed = cache.get(response);
+        let parsed = cache2.get(response);
         if (!parsed) {
           parsed = parseMiddlewareResponse(response, options, client);
-          cache.set(response, parsed);
+          cache2.set(response, parsed);
         }
         return parsed;
       }
@@ -17241,8 +17241,7 @@ Please migrate to a newer model. Visit https://docs.anthropic.com/en/docs/resour
     return Anthropic2;
   })();
 
-  // src/claude.js
-  var MODEL = "claude-opus-5-5";
+  // src/prompt.js
   var CARD_SCHEMA = {
     type: "object",
     properties: {
@@ -17252,19 +17251,27 @@ Please migrate to a newer model. Visit https://docs.anthropic.com/en/docs/resour
       },
       name: {
         type: "string",
-        description: 'Card name exactly as printed in English, including suffixes like "ex", "V", "VMAX", "GX". Empty if unknown.'
+        description: 'English name of the card, including suffixes like "ex", "V", "VMAX", "GX", even if the card is printed in another language (e.g. "Charizard ex" for a Japanese \u30EA\u30B6\u30FC\u30C9\u30F3ex). Empty if unknown.'
+      },
+      number_legible: {
+        type: "boolean",
+        description: "True only if you can actually read every character of the collector number in this image. False if it is blurry, cut off, covered, too small, or you would be inferring it from the artwork or from memory."
       },
       number: {
         type: "string",
-        description: 'Collector number before the slash, e.g. "199" from 199/165, or a full code like "TG05", "SV107", "GG44". Empty if unreadable.'
+        description: 'Collector number before the slash exactly as read, e.g. "199" from 199/165, or a full code like "TG05", "SV107", "GG44". Must be empty when number_legible is false.'
       },
       set_total: {
         type: "string",
         description: 'Number after the slash, e.g. "165". Empty if unreadable or absent.'
       },
+      set_code: {
+        type: "string",
+        description: 'Set code printed in the bottom corner next to the regulation mark, e.g. "MEW", "PBL", "SV2a", "sv8a". Empty if not printed or unreadable.'
+      },
       set_name: {
         type: "string",
-        description: "English set name if identifiable from the set symbol, card style, or listing text. Empty if unsure."
+        description: "English set name if identifiable from the set code, set symbol, card style, or listing text. Empty if unsure."
       },
       language: {
         type: "string",
@@ -17276,28 +17283,25 @@ Please migrate to a newer model. Visit https://docs.anthropic.com/en/docs/resour
       },
       grade_label: {
         type: "string",
-        description: 'Grader and grade from the slab label, e.g. "PSA 10". Empty if not graded or unreadable.'
+        description: 'Grader, grade, and tier wording exactly as on the slab label, e.g. "PSA 10", "CGC 10 Gem Mint", "CGC Pristine 10", "BGS 9.5", "BGS Black Label 10". CGC Pristine and BGS Pristine / Black Label slabs say so on the label and sell for more than a regular 10, so include that word when present. Empty if not graded or unreadable.'
       },
       confidence: {
         type: "string",
         enum: ["high", "medium", "low"]
-      },
-      notes: {
-        type: "string",
-        description: "One short sentence on what is visible or why identification is uncertain."
       }
     },
     required: [
       "card_visible",
       "name",
+      "number_legible",
       "number",
       "set_total",
+      "set_code",
       "set_name",
       "language",
       "graded",
       "grade_label",
-      "confidence",
-      "notes"
+      "confidence"
     ],
     additionalProperties: false
   };
@@ -17305,7 +17309,25 @@ Please migrate to a newer model. Visit https://docs.anthropic.com/en/docs/resour
 The seller usually holds the current auction card up to the camera, sometimes in a sleeve, toploader, or grading slab. The frame may be blurry, angled, or show other cards in the background; identify the one being presented.
 Read the collector number in the bottom corner whenever it is legible, since it pins the exact printing. Use the artwork, set symbol, and card frame to infer the set when the number is unclear.
 Listing titles on Whatnot are usually generic placeholders such as "$1 Starting Card On Screen" because sellers run hundreds of cards through one listing. Ignore the listing text unless it names a specific card, and even then the card in the frame wins when they disagree.
-Never guess a number you cannot read; leave it empty instead.`;
+Japanese and other non-English cards are common; report the printed language and still give the card's English name.
+Never guess or recall a collector number: a wrong number prices the wrong card. If you cannot read it in this image, set number_legible to false and leave number empty. The same goes for set_total and set_code.`;
+  function userText(listingHint) {
+    return listingHint ? `Listing text on the page: "${listingHint}"
+
+Identify the card in this frame.` : "Identify the card in this frame.";
+  }
+  function parseCardJson(text) {
+    try {
+      return JSON.parse(text);
+    } catch {
+      const m = String(text).match(/\{[\s\S]*\}/);
+      if (m) return JSON.parse(m[0]);
+      throw new Error("The AI's answer wasn't valid JSON; try scanning again.");
+    }
+  }
+
+  // src/claude.js
+  var MODEL = "claude-opus-5-5";
   async function identifyCard(apiKey, imageBase64, listingHint = "") {
     const client = new Anthropic({ apiKey, dangerouslyAllowBrowser: true });
     const content = [
@@ -17315,9 +17337,7 @@ Never guess a number you cannot read; leave it empty instead.`;
       },
       {
         type: "text",
-        text: listingHint ? `Listing text on the page: "${listingHint}"
-
-Identify the card in this frame.` : "Identify the card in this frame."
+        text: userText(listingHint)
       }
     ];
     const response = await client.beta.messages.create({
@@ -17340,7 +17360,7 @@ Identify the card in this frame.` : "Identify the card in this frame."
     }
     const text = response.content.find((b) => b.type === "text");
     if (!text) throw new Error("Claude returned no answer.");
-    return JSON.parse(text.text);
+    return { ...parseCardJson(text.text), model: MODEL };
   }
   function describeApiError(err) {
     if (err instanceof Anthropic.AuthenticationError) return "Invalid Anthropic API key. Check it in \u2699 settings.";
@@ -17350,6 +17370,606 @@ Identify the card in this frame.` : "Identify the card in this frame."
     if (err instanceof Anthropic.APIConnectionError) return "Couldn't reach Anthropic. Check your internet connection.";
     if (err instanceof Anthropic.APIError) return `Anthropic API error ${err.status}: ${err.message}`;
     return String(err && err.message ? err.message : err);
+  }
+
+  // src/gemini.js
+  var BASE = "https://generativelanguage.googleapis.com/v1beta";
+  var FALLBACK_MODELS = ["gemini-3.8-flash", "gemini-3.5-flash", "gemini-3.5-flash-lite", "gemini-3.1-flash-lite"];
+  var MODEL_LIST_TTL_MS = 24 * 60 * 60 * 1e3;
+  var COOLDOWN_MS = 10 * 60 * 1e3;
+  var cooldownUntil = /* @__PURE__ */ new Map();
+  var modelCache = { key: "", at: 0, models: [] };
+  var GeminiError = class extends Error {
+    constructor(message, status) {
+      super(message);
+      this.status = status;
+    }
+  };
+  function geminiSchema(schema) {
+    if (Array.isArray(schema)) return schema.map(geminiSchema);
+    if (!schema || typeof schema !== "object") return schema;
+    const out = {};
+    for (const [k, v] of Object.entries(schema)) {
+      if (k === "additionalProperties") continue;
+      out[k] = geminiSchema(v);
+    }
+    return out;
+  }
+  function versionOf(name) {
+    const m = name.match(/^gemini-(\d+)(?:\.(\d+))?/);
+    return m ? Number(m[1]) + Number(m[2] || 0) / 100 : 0;
+  }
+  function pickModels(names) {
+    const usable = names.filter((n) => /^gemini-\d+(\.\d+)?-flash(-lite)?$/.test(n));
+    return usable.sort((a, b) => {
+      const liteA = a.endsWith("-lite"), liteB = b.endsWith("-lite");
+      if (liteA !== liteB) return liteA ? 1 : -1;
+      return versionOf(b) - versionOf(a);
+    });
+  }
+  async function listModels(apiKey) {
+    if (modelCache.key === apiKey && Date.now() - modelCache.at < MODEL_LIST_TTL_MS && modelCache.models.length) {
+      return modelCache.models;
+    }
+    try {
+      const res = await fetch(`${BASE}/models?pageSize=1000`, { headers: { "x-goog-api-key": apiKey } });
+      if (res.status === 400 || res.status === 401 || res.status === 403) {
+        throw new GeminiError("Invalid Gemini API key. Check it in \u2699 settings.", res.status);
+      }
+      if (!res.ok) return FALLBACK_MODELS;
+      const json = await res.json();
+      const names = (json.models || []).filter((m) => (m.supportedGenerationMethods || []).includes("generateContent")).map((m) => m.name.replace(/^models\//, ""));
+      const models = pickModels(names);
+      if (!models.length) return FALLBACK_MODELS;
+      modelCache = { key: apiKey, at: Date.now(), models };
+      return models;
+    } catch (e) {
+      if (e instanceof GeminiError) throw e;
+      return FALLBACK_MODELS;
+    }
+  }
+  var noThinkingConfig = /* @__PURE__ */ new Set();
+  async function callModel(apiKey, model, imageBase64, listingHint) {
+    try {
+      return await callModelOnce(apiKey, model, imageBase64, listingHint, !noThinkingConfig.has(model));
+    } catch (e) {
+      if (e instanceof GeminiError && e.status === 400 && /thinking/i.test(e.message) && !noThinkingConfig.has(model)) {
+        noThinkingConfig.add(model);
+        return callModelOnce(apiKey, model, imageBase64, listingHint, false);
+      }
+      throw e;
+    }
+  }
+  async function callModelOnce(apiKey, model, imageBase64, listingHint, lowThinking) {
+    const body = {
+      systemInstruction: { parts: [{ text: SYSTEM }] },
+      contents: [
+        {
+          role: "user",
+          parts: [
+            { inlineData: { mimeType: "image/jpeg", data: imageBase64 } },
+            { text: userText(listingHint) }
+          ]
+        }
+      ],
+      generationConfig: {
+        responseMimeType: "application/json",
+        responseSchema: geminiSchema(CARD_SCHEMA),
+        ...lowThinking ? { thinkingConfig: { thinkingLevel: "low" } } : {}
+      }
+    };
+    const res = await fetch(`${BASE}/models/${model}:generateContent`, {
+      method: "POST",
+      headers: { "content-type": "application/json", "x-goog-api-key": apiKey },
+      body: JSON.stringify(body)
+    });
+    const json = await res.json().catch(() => ({}));
+    if (!res.ok) {
+      const msg = json.error && json.error.message || `HTTP ${res.status}`;
+      throw new GeminiError(msg, res.status);
+    }
+    const cand = json.candidates && json.candidates[0];
+    if (!cand) {
+      const reason = json.promptFeedback && json.promptFeedback.blockReason;
+      throw new GeminiError(reason ? `Gemini blocked this frame (${reason}).` : "Gemini returned no answer.", 200);
+    }
+    const text = (cand.content && cand.content.parts || []).filter((p) => typeof p.text === "string" && !p.thought).map((p) => p.text).join("");
+    if (!text) throw new GeminiError(`Gemini returned no answer (${cand.finishReason || "unknown reason"}).`, 200);
+    return parseCardJson(text);
+  }
+  async function identifyCardGemini(apiKey, imageBase64, listingHint = "") {
+    const models = await listModels(apiKey);
+    const now = Date.now();
+    const ready = models.filter((m) => (cooldownUntil.get(m) || 0) <= now);
+    const order = ready.length ? ready : models;
+    let quotaHit = false;
+    let lastError = null;
+    for (const model of order) {
+      try {
+        const card = await callModel(apiKey, model, imageBase64, listingHint);
+        return { ...card, model };
+      } catch (e) {
+        lastError = e;
+        const status = e instanceof GeminiError ? e.status : 0;
+        if (status === 400 && /api key/i.test(e.message)) {
+          throw new GeminiError("Invalid Gemini API key. Check it in \u2699 settings.", 400);
+        }
+        if (status === 401 || status === 403) {
+          throw new GeminiError("Gemini rejected this API key: " + e.message, status);
+        }
+        if (status === 429) {
+          quotaHit = true;
+          cooldownUntil.set(model, Date.now() + COOLDOWN_MS);
+          continue;
+        }
+        if (status === 404 || status >= 500) continue;
+        throw e;
+      }
+    }
+    if (quotaHit) {
+      throw new GeminiError(
+        "Gemini's free limit is used up for now. Wait a few minutes (or until tomorrow for the daily limit), or switch to Claude in \u2699 settings.",
+        429
+      );
+    }
+    throw lastError || new GeminiError("No Gemini model was available.", 0);
+  }
+
+  // src/ondevice.js
+  var ON_DEVICE_MODEL = "on-device Gemini Nano";
+  var OPTIONS = {
+    expectedInputs: [{ type: "text", languages: ["en"] }, { type: "image" }],
+    expectedOutputs: [{ type: "text", languages: ["en"] }]
+  };
+  var baseSession = null;
+  function api() {
+    return typeof LanguageModel === "undefined" ? null : LanguageModel;
+  }
+  async function onDeviceStatus() {
+    const LM = api();
+    if (!LM) return "unsupported";
+    try {
+      return await LM.availability(OPTIONS);
+    } catch {
+      return "unavailable";
+    }
+  }
+  async function getBaseSession() {
+    if (!baseSession) {
+      baseSession = api().create({ ...OPTIONS, initialPrompts: [{ role: "system", content: SYSTEM }] }).catch((e) => {
+        baseSession = null;
+        throw e;
+      });
+    }
+    return baseSession;
+  }
+  async function warmUpOnDevice() {
+    if (await onDeviceStatus() !== "available") return false;
+    await getBaseSession();
+    return true;
+  }
+  function base64ToBlob(b64) {
+    const bin = atob(b64);
+    const bytes = new Uint8Array(bin.length);
+    for (let i = 0; i < bin.length; i++) bytes[i] = bin.charCodeAt(i);
+    return new Blob([bytes], { type: "image/jpeg" });
+  }
+  async function identifyCardOnDevice(imageBase64, listingHint = "") {
+    if (await onDeviceStatus() !== "available") {
+      throw new Error("On-device AI isn't ready on this computer.");
+    }
+    const session = await (await getBaseSession()).clone();
+    try {
+      const text = await session.prompt(
+        [
+          {
+            role: "user",
+            content: [
+              { type: "image", value: base64ToBlob(imageBase64) },
+              { type: "text", value: userText(listingHint) }
+            ]
+          }
+        ],
+        { responseConstraint: CARD_SCHEMA, omitResponseConstraintInput: true }
+      );
+      return { ...parseCardJson(text), model: ON_DEVICE_MODEL };
+    } finally {
+      session.destroy();
+    }
+  }
+
+  // src/config.js
+  var SERVICE_URL = "";
+
+  // src/service.js
+  function serviceConfigured() {
+    return /^https:\/\//.test(SERVICE_URL);
+  }
+  async function identifyCardViaService(imageBase64, listingHint, installId) {
+    let res;
+    try {
+      res = await fetch(`${SERVICE_URL.replace(/\/$/, "")}/identify`, {
+        method: "POST",
+        headers: { "content-type": "application/json" },
+        body: JSON.stringify({ image: imageBase64, hint: listingHint || "", installId })
+      });
+    } catch {
+      throw new Error("Couldn't reach the card-ID service. Check your internet connection.");
+    }
+    const json = await res.json().catch(() => ({}));
+    if (res.status === 429) {
+      throw new Error(json.error || "You're scanning faster than the free service allows. Wait a minute and try again.");
+    }
+    if (!res.ok) throw new Error(json.error || `Card-ID service error ${res.status}.`);
+    return json.card;
+  }
+  async function gradedViaService(tcgPlayerId, gradeKey, installId) {
+    const res = await fetch(`${SERVICE_URL.replace(/\/$/, "")}/graded`, {
+      method: "POST",
+      headers: { "content-type": "application/json" },
+      body: JSON.stringify({ tcgPlayerId, grade: gradeKey, installId })
+    });
+    const json = await res.json().catch(() => ({}));
+    if (!res.ok) throw new Error(json.error || `Card-ID service error ${res.status}.`);
+    return json.graded || null;
+  }
+
+  // src/graded.js
+  var PPT = "https://www.pokemonpricetracker.com/api/v2/cards";
+  function parseGrade(label) {
+    const text = String(label || "").toUpperCase();
+    const m = text.match(/\b(PSA|CGC|BGS|BECKETT|SGC|TAG|ACE)\b\D{0,20}?(10|[1-9](?:\.5)?)\b/);
+    if (!m) return null;
+    const grader = m[1] === "BECKETT" ? "BGS" : m[1];
+    const grade = m[2];
+    let tier = "";
+    if (grade === "10" && /BLACK\s*LABEL/.test(text) && grader === "BGS") tier = "blacklabel";
+    else if (grade === "10" && /PRISTINE/.test(text) && (grader === "CGC" || grader === "BGS")) tier = "pristine";
+    const tierName = { pristine: "Pristine", blacklabel: "Black Label" }[tier];
+    return {
+      grader,
+      grade,
+      tier,
+      label: tierName ? `${grader} ${tierName} ${grade}` : `${grader} ${grade}`,
+      key: norm(grader + grade + tier)
+    };
+  }
+  function acceptedKeys(gradeKey) {
+    const k = norm(gradeKey);
+    const m = k.match(/^([a-z]+?)(\d+)(pristine|blacklabel)?$/);
+    if (!m || !m[3]) return /* @__PURE__ */ new Set([k]);
+    const [, grader, grade, tier] = m;
+    return /* @__PURE__ */ new Set([k, `${grader}${tier}${grade}`, `${grader}${tier}`, `${tier}${grade}`]);
+  }
+  var norm = (k) => String(k).toLowerCase().replace(/[^a-z0-9]/g, "");
+  var RECENT_DAYS = 7;
+  var daysRejected = false;
+  async function fetchGradedCard(apiKey, tcgPlayerId) {
+    const base2 = `${PPT}?tcgPlayerId=${encodeURIComponent(tcgPlayerId)}&includeEbay=true`;
+    const get = (url) => fetch(url, { headers: { Authorization: `Bearer ${apiKey}` } });
+    let res = await get(daysRejected ? base2 : `${base2}&days=${RECENT_DAYS}`);
+    if (!daysRejected && (res.status === 400 || res.status === 402 || res.status === 403)) {
+      const retry = await get(base2);
+      if (retry.ok) {
+        daysRejected = true;
+        res = retry;
+      }
+    }
+    if (!res.ok) {
+      const err = new Error(`Graded price API error ${res.status}`);
+      err.status = res.status;
+      throw err;
+    }
+    const json = await res.json();
+    return (Array.isArray(json.data) ? json.data[0] : json.data) || null;
+  }
+  var PRICE_BASES = [
+    [["smartMarketPrice"], "market"],
+    [["medianPrice", "median"], "median"],
+    [["averagePrice", "average", "avgPrice", "avg"], "avg"],
+    [["marketPrice", "price"], "price"]
+  ];
+  var COUNT_FIELDS = ["salesCount", "count", "totalSales", "sales", "numberOfSales"];
+  function firstNumber(obj, fields, depth = 0) {
+    if (typeof obj === "number" && Number.isFinite(obj)) return obj;
+    if (!obj || typeof obj !== "object") return null;
+    for (const f of fields) {
+      const v = obj[f];
+      if (typeof v === "number" && Number.isFinite(v)) return v;
+      if (v && typeof v === "object" && typeof v.value === "number") return v.value;
+    }
+    if (depth < 2) {
+      for (const v of Object.values(obj)) {
+        if (v && typeof v === "object" && !Array.isArray(v)) {
+          const found = firstNumber(v, fields, depth + 1);
+          if (found != null) return found;
+        }
+      }
+    }
+    return null;
+  }
+  function pickGradedPrice(card, gradeKey) {
+    if (!card) return null;
+    const want = norm(gradeKey);
+    const accepted = acceptedKeys(want);
+    const roots = [card.ebay, card.graded, card.gradedPrices, card].filter(Boolean);
+    const seen = /* @__PURE__ */ new Set();
+    const stack = roots.map((r) => [r, 0]);
+    while (stack.length) {
+      const [node, depth] = stack.shift();
+      if (!node || typeof node !== "object" || seen.has(node) || depth > 4) continue;
+      seen.add(node);
+      for (const [k, v] of Object.entries(node)) {
+        if (accepted.has(norm(k))) {
+          const lastSold = pickLastSold(v) || lastSoldFromAnyList(card, want);
+          const summary = gradeSummary(v);
+          if (lastSold || summary) {
+            return {
+              price: summary ? summary.price : null,
+              basis: summary ? summary.basis : null,
+              count: firstNumber(v, COUNT_FIELDS),
+              lastSold
+            };
+          }
+        }
+        if (v && typeof v === "object") stack.push([v, depth + 1]);
+      }
+    }
+    return null;
+  }
+  function gradeSummary(node) {
+    for (const [fields, basis] of PRICE_BASES) {
+      const price = firstNumber(node, fields);
+      if (price != null && price > 0) return { price, basis };
+    }
+    return null;
+  }
+  var SALE_PRICE_FIELDS = ["soldPrice", "salePrice", "price", "totalPrice", "amount", "value"];
+  var SALE_DATE_FIELDS = ["soldDate", "saleDate", "dateSold", "endDate", "date", "soldAt", "timestamp"];
+  function saleDate(sale) {
+    for (const f of SALE_DATE_FIELDS) {
+      const t = Date.parse(sale[f]);
+      if (Number.isFinite(t)) return t;
+    }
+    return null;
+  }
+  function saleGradeKey(sale) {
+    const grader = sale.grader || sale.gradingCompany || sale.company;
+    const grade = sale.grade ?? sale.gradeValue;
+    if (grader && grade != null) return norm(`${grader}${grade}`);
+    for (const f of ["grade", "gradeLabel", "condition", "title", "name"]) {
+      const parsed = typeof sale[f] === "string" ? parseGrade(sale[f]) : null;
+      if (parsed) return parsed.key;
+    }
+    return null;
+  }
+  function lastSoldFromAnyList(card, want) {
+    let best = null;
+    const visit = (node, depth) => {
+      if (!node || typeof node !== "object" || depth > 5) return;
+      for (const v of Object.values(node)) {
+        if (Array.isArray(v)) {
+          for (const sale of v) {
+            if (!sale || typeof sale !== "object" || saleGradeKey(sale) !== want) continue;
+            const price = firstNumber(sale, SALE_PRICE_FIELDS);
+            const t = saleDate(sale);
+            if (price > 0 && t && (!best || t > best.t)) best = { price, t };
+          }
+        } else if (v && typeof v === "object") {
+          visit(v, depth + 1);
+        }
+      }
+    };
+    visit(card, 0);
+    return best ? { price: best.price, date: new Date(best.t).toISOString() } : null;
+  }
+  function recentSales(gradeNode) {
+    const out = [];
+    const visit = (node, depth) => {
+      if (!node || typeof node !== "object" || depth > 3) return;
+      for (const v of Object.values(node)) {
+        if (Array.isArray(v)) {
+          for (const sale of v) {
+            if (!sale || typeof sale !== "object") continue;
+            const price = firstNumber(sale, SALE_PRICE_FIELDS);
+            const t = saleDate(sale);
+            if (price > 0 && t) out.push({ price, t });
+          }
+        } else if (v && typeof v === "object") {
+          visit(v, depth + 1);
+        }
+      }
+    };
+    visit(gradeNode, 0);
+    return out.sort((a, b) => b.t - a.t);
+  }
+  function pickLastSold(gradeNode) {
+    if (!gradeNode || typeof gradeNode !== "object") return null;
+    const sales = recentSales(gradeNode);
+    if (sales.length) return { price: sales[0].price, date: new Date(sales[0].t).toISOString() };
+    const direct = firstNumber(gradeNode, ["lastSoldPrice", "lastSalePrice", "lastSold"]);
+    if (direct != null && direct > 0) {
+      const t = Date.parse(gradeNode.lastSoldDate || gradeNode.lastSaleDate || "");
+      return { price: direct, date: Number.isFinite(t) ? new Date(t).toISOString() : null };
+    }
+    return null;
+  }
+  function ebaySoldUrl(name, number, gradeLabel) {
+    const g = parseGrade(gradeLabel);
+    let q = [name, number, gradeLabel].filter(Boolean).join(" ");
+    if (g && g.grade === "10" && !g.tier) {
+      if (g.grader === "CGC") q += " -pristine";
+      if (g.grader === "BGS") q += " -pristine -black";
+    }
+    return `https://www.ebay.com/sch/i.html?_nkw=${encodeURIComponent(q)}&LH_Sold=1&LH_Complete=1`;
+  }
+
+  // src/tcgcsv.js
+  var DIRECT = "https://tcgcsv.com/tcgplayer";
+  var USER_AGENT = "WhatnotPriceChecker/3.2.0 (+https://github.com/OceanAKA/WhatnotPriceChecker)";
+  var base = DIRECT;
+  function setTcgcsvBase(url) {
+    base = url || DIRECT;
+  }
+  var ENGLISH = 3;
+  var JAPANESE = 85;
+  var TTL_MS = 6 * 60 * 60 * 1e3;
+  var memo = /* @__PURE__ */ new Map();
+  async function getJson(url) {
+    const hit = memo.get(url);
+    if (hit && Date.now() - hit.at < TTL_MS) return hit.promise;
+    const promise = (async () => {
+      let lastError;
+      for (let attempt = 0; attempt < 3; attempt++) {
+        if (attempt) await new Promise((r) => setTimeout(r, 200 * attempt));
+        try {
+          const res = await fetch(url, base === DIRECT ? { headers: { "User-Agent": USER_AGENT } } : void 0);
+          if (res.ok) return (await res.json()).results || [];
+          lastError = new Error(`TCGCSV error ${res.status}`);
+        } catch (e) {
+          lastError = e;
+        }
+      }
+      throw lastError;
+    })();
+    memo.set(url, { at: Date.now(), promise });
+    promise.catch(() => memo.delete(url));
+    return promise;
+  }
+  var groups = (cat) => getJson(`${base}/${cat}/groups`);
+  var products = (cat, groupId) => getJson(`${base}/${cat}/${groupId}/products`);
+  var prices = (cat, groupId) => getJson(`${base}/${cat}/${groupId}/prices`);
+  function words(s) {
+    return new Set(
+      String(s || "").toLowerCase().replace(/^[a-z]{1,5}\d{0,3}[a-z]?\s*:\s*/, "").replace(/['’]/g, "").replace(/&/g, " and ").replace(/[^a-z0-9 ]/g, " ").split(/\s+/).filter((w) => w && w !== "set" && w !== "the")
+    );
+  }
+  function similarity(a, b) {
+    const A = words(a), B = words(b);
+    if (!A.size || !B.size) return 0;
+    let shared = 0;
+    for (const w of A) if (B.has(w)) shared++;
+    return 0.7 * (shared / Math.min(A.size, B.size)) + 0.3 * (shared / Math.max(A.size, B.size));
+  }
+  function normalizeNumber(n) {
+    const s = String(n || "").split("/")[0].trim().toUpperCase().replace(/\s+/g, "");
+    return /^\d+$/.test(s) ? String(parseInt(s, 10)) : s;
+  }
+  function productNumber(p) {
+    const e = (p.extendedData || []).find((x) => x.name === "Number");
+    return e ? e.value : "";
+  }
+  function productRarity(p) {
+    const e = (p.extendedData || []).find((x) => x.name === "Rarity");
+    return e ? e.value : "";
+  }
+  function groupScore(g, { setName, setCode, releaseDate }) {
+    let score = setName ? similarity(setName, g.name) : 0;
+    if (setCode && (g.abbreviation || "").toLowerCase() === setCode.toLowerCase()) score += 2;
+    const day = releaseDate ? releaseDate.replace(/\//g, "-").slice(0, 10) : "";
+    if (day && (g.publishedOn || "").slice(0, 10) === day) score += 1;
+    return score;
+  }
+  async function rankGroups(cat, set, max) {
+    return (await groups(cat)).map((g) => ({ g, s: groupScore(g, set) })).filter((x) => x.s >= 0.5).sort((a, b) => b.s - a.s).slice(0, max).map((x) => x.g);
+  }
+  function baseName(p) {
+    return (p.name || "").replace(/\s+-\s+[^-]*\d[^-]*$/, "");
+  }
+  function sameName(a, b) {
+    const A = words(a), B = words(b);
+    if (!A.size || A.size !== B.size) return false;
+    for (const w of A) if (!B.has(w)) return false;
+    return true;
+  }
+  async function findProducts(cat, groupId, name, number) {
+    const [items, rows] = await Promise.all([products(cat, groupId), prices(cat, groupId)]);
+    const cards = items.filter((p) => productNumber(p));
+    const want = normalizeNumber(number);
+    const nameWords = words(name);
+    let exact = null;
+    if (want) {
+      let bestScore = -1;
+      for (const p of cards) {
+        if (normalizeNumber(productNumber(p)) !== want) continue;
+        const pw = words(p.cleanName || p.name);
+        let shared = 0;
+        for (const w of nameWords) if (pw.has(w)) shared++;
+        const score = nameWords.size ? shared / nameWords.size : 0;
+        if (score > bestScore) {
+          exact = p;
+          bestScore = score;
+        }
+      }
+      if (bestScore < 0.5) exact = null;
+    }
+    const others = cards.filter((p) => p !== exact && sameName(baseName(p), name));
+    const withRows = (p) => ({ product: p, rows: rows.filter((r) => r.productId === p.productId) });
+    return { exact: exact && withRows(exact), others: others.map(withRows) };
+  }
+  function toCard(group, product, rows) {
+    return {
+      id: `tcgplayer-${product.productId}`,
+      productId: product.productId,
+      // "Cynthia's Spiritomb - 108/193 (Poke Ball Pattern)" -> "Cynthia's Spiritomb (Poke Ball Pattern)";
+      // promos have no "/total": "Turtwig - 040" -> "Turtwig"
+      name: (product.name || "").replace(/\s+-\s+[A-Z]{0,4}-?\d+[A-Z]?(?:\/[A-Z0-9-]{1,8})?(?=\s|$)/, ""),
+      number: productNumber(product),
+      rarity: productRarity(product),
+      setName: (group.name || "").replace(/^[A-Z]{1,5}\d{0,3}[a-z]?\s*:\s*/, ""),
+      image: product.imageUrl ? product.imageUrl.replace(/_200w\.jpg$/, "_400w.jpg") : "",
+      url: product.url,
+      prices: rows.filter((r) => r.marketPrice != null || r.lowPrice != null).map((r) => ({ label: r.subTypeName || "Market", market: r.marketPrice, low: r.lowPrice, high: r.highPrice }))
+    };
+  }
+  var RECENT_DAYS2 = 730;
+  async function tcgcsvSearchByName({ name, number, setTotal }, cat = ENGLISH) {
+    if (!name) return [];
+    const cutoff = Date.now() - RECENT_DAYS2 * 864e5;
+    const recent = (await groups(cat)).filter((g) => Date.parse(g.publishedOn) >= cutoff);
+    const want = normalizeNumber(number);
+    const total = parseInt(setTotal, 10);
+    const found = [];
+    const queue = [...recent];
+    async function worker() {
+      while (queue.length) {
+        const g = queue.shift();
+        const hit = await findProducts(cat, g.groupId, name, "").catch(() => null);
+        if (hit) for (const o of hit.others) found.push(toCard(g, o.product, o.rows));
+      }
+    }
+    await Promise.all(Array.from({ length: 6 }, worker));
+    const score = (c) => {
+      const [n, d] = String(c.number).split("/");
+      let sc = 0;
+      if (want && normalizeNumber(n) === want) sc += 2;
+      if (total && parseInt(d, 10) === total) sc += 1;
+      return sc;
+    };
+    return found.sort((a, b) => score(b) - score(a)).slice(0, 8);
+  }
+  async function tcgcsvPrice({ name, number, setName, releaseDate }) {
+    const [group] = await rankGroups(ENGLISH, { setName, releaseDate }, 1);
+    if (!group) return null;
+    const { exact } = await findProducts(ENGLISH, group.groupId, name, number);
+    return exact ? toCard(group, exact.product, exact.rows) : null;
+  }
+  async function tcgcsvSearch({ name, number, setName, setCode, setTotal }, cat = ENGLISH) {
+    if (!name || !setName && !setCode) return [];
+    const exacts = [];
+    const others = [];
+    for (const g of await rankGroups(cat, { setName, setCode }, 3)) {
+      const hit = await findProducts(cat, g.groupId, name, number);
+      if (hit.exact) exacts.push(toCard(g, hit.exact.product, hit.exact.rows));
+      if (!others.length) others.push(...hit.others.map((o) => toCard(g, o.product, o.rows)));
+    }
+    const total = parseInt(setTotal, 10);
+    if (total) {
+      const denom = (c) => parseInt(String(c.number).split("/")[1], 10);
+      exacts.sort((a, b) => (denom(b) === total) - (denom(a) === total));
+    }
+    const seen = /* @__PURE__ */ new Set();
+    return [...exacts, ...others].filter((c) => !seen.has(c.productId) && seen.add(c.productId)).slice(0, 8);
   }
 
   // src/prices.js
@@ -17364,7 +17984,7 @@ Identify the card in this frame.` : "Identify the card in this frame."
     const headers = priceApiKey ? { "X-Api-Key": priceApiKey } : {};
     let lastError;
     for (let attempt = 0; attempt < 5; attempt++) {
-      if (attempt) await new Promise((r) => setTimeout(r, 500 * 2 ** (attempt - 1)));
+      if (attempt) await new Promise((r) => setTimeout(r, 150 * attempt));
       try {
         const res = await fetch(url, { headers });
         if (res.ok) return (await res.json()).data || [];
@@ -17376,17 +17996,14 @@ Identify the card in this frame.` : "Identify the card in this frame."
     }
     throw lastError;
   }
-  function normalizeNumber(number) {
-    const n = (number || "").trim().toUpperCase().replace(/\s+/g, "");
-    if (!n) return "";
-    return /^\d+$/.test(n) ? String(parseInt(n, 10)) : n;
-  }
-  function rank(cards, { name, setTotal, setName }) {
+  function rank(cards, { name, number, setTotal, setName }) {
     const total = parseInt(setTotal, 10);
+    const wantNumber = normalizeNumber(number);
     const wantName = (name || "").toLowerCase();
     const wantSet = (setName || "").toLowerCase().replace(/\s+set$/, "");
     const score = (c) => {
       let s = 0;
+      if (wantNumber && normalizeNumber(c.number) === wantNumber) s += 10;
       if (wantName && c.name.toLowerCase() === wantName) s += 4;
       if (total && c.set && c.set.printedTotal === total) s += 2;
       if (wantSet && c.set && c.set.name) {
@@ -17398,7 +18015,88 @@ Identify the card in this frame.` : "Identify the card in this frame."
     };
     return cards.map((c, i) => ({ c, i, s: score(c) })).sort((a, b) => b.s - a.s || a.i - b.i).map((x) => x.c);
   }
+  var CACHE_TTL_MS = 6 * 60 * 60 * 1e3;
+  var MAX_RESULTS = 6;
+  var cache = /* @__PURE__ */ new Map();
   async function searchCards(card) {
+    const fields = [card.name, card.number, card.setTotal, card.setName, card.setCode, card.language];
+    const key = JSON.stringify(fields.map((v) => (v || "").toLowerCase().trim()));
+    const hit = cache.get(key);
+    if (hit && Date.now() - hit.at < CACHE_TTL_MS) return { ...hit.result, cached: true };
+    if (/japan/i.test(card.language || "")) {
+      let cards2 = await tcgcsvSearch(card, JAPANESE).catch(() => []);
+      if (!cards2.length) cards2 = await tcgcsvSearchByName(card, JAPANESE).catch(() => []);
+      if (cards2.length) {
+        const result2 = { cards: cards2, language: "Japanese" };
+        cache.set(key, { at: Date.now(), result: result2 });
+        return result2;
+      }
+    }
+    if (card.setCode || card.setName) {
+      const direct = await tcgcsvSearch(card).catch(() => []);
+      if (direct.length) {
+        const result2 = { cards: direct };
+        cache.set(key, { at: Date.now(), result: result2 });
+        return result2;
+      }
+    }
+    let found = [];
+    let identifyError = null;
+    try {
+      found = (await identifyCards(card)).cards.slice(0, MAX_RESULTS);
+    } catch (e) {
+      identifyError = e;
+    }
+    let cards;
+    if (found.length) {
+      cards = await Promise.all(found.map(priceCard));
+    } else {
+      cards = await tcgcsvSearch(card).catch(() => []);
+      if (!cards.length && identifyError) {
+        throw new Error("The card database isn't responding. Try again in a moment.");
+      }
+    }
+    const result = { cards };
+    if (cards.length) cache.set(key, { at: Date.now(), result });
+    return result;
+  }
+  function fromPokemonTcg(c) {
+    const tp = c.tcgplayer && c.tcgplayer.prices || {};
+    const label = (k) => k.replace(/([A-Z])/g, " $1").replace(/^./, (x) => x.toUpperCase());
+    return {
+      id: c.id,
+      name: c.name,
+      number: c.number,
+      rarity: c.rarity || "",
+      setName: c.set ? c.set.name : "",
+      image: c.images ? c.images.small : "",
+      url: tcgplayerSearchUrl(c),
+      prices: Object.entries(tp).map(([k, p]) => ({ label: label(k), market: p.market, low: p.low, high: p.high })),
+      cardmarketTrend: c.cardmarket && c.cardmarket.prices ? c.cardmarket.prices.trendPrice : null
+    };
+  }
+  function tcgplayerSearchUrl(c) {
+    const q = `${c.name} ${c.number || ""}`.trim();
+    return `https://www.tcgplayer.com/search/pokemon/product?productLineName=pokemon&q=${encodeURIComponent(q)}`;
+  }
+  async function priceCard(c) {
+    const base2 = fromPokemonTcg(c);
+    const live = await tcgcsvPrice({
+      name: c.name,
+      number: c.number,
+      setName: c.set && c.set.name,
+      releaseDate: c.set && c.set.releaseDate
+    }).catch(() => null);
+    if (!live) return base2;
+    return {
+      ...base2,
+      productId: live.productId,
+      url: live.url,
+      prices: live.prices.length ? live.prices : base2.prices,
+      image: base2.image || live.image
+    };
+  }
+  async function identifyCards(card) {
     const name = (card.name || "").replace(/"/g, "").trim();
     if (!name) return { cards: [], query: "" };
     const number = normalizeNumber(card.number);
@@ -17409,9 +18107,9 @@ Identify the card in this frame.` : "Identify the card in this frame."
     if (total) attempts.push(`!${quoted} set.printedTotal:${total}`);
     attempts.push(`!${quoted}`);
     attempts.push(quoted);
-    const words = name.split(/\s+/).filter(Boolean);
-    if (words.length) attempts.push(words.map((w) => `name:${w}*`).join(" "));
-    if (words.length > 1) attempts.push(`name:${words[0]}*`);
+    const words2 = name.split(/\s+/).filter(Boolean);
+    if (words2.length) attempts.push(words2.map((w) => `name:${w}*`).join(" "));
+    if (words2.length > 1) attempts.push(`name:${words2[0]}*`);
     let lastError = null;
     for (const q of attempts) {
       try {
@@ -17421,7 +18119,7 @@ Identify the card in this frame.` : "Identify the card in this frame."
         lastError = e;
       }
     }
-    if (lastError) throw new Error("The price database (pokemontcg.io) isn't responding. Try again in a moment.");
+    if (lastError) throw lastError;
     return { cards: [], query: attempts[attempts.length - 1] };
   }
   function parseTitle(raw) {
@@ -17435,15 +18133,150 @@ Identify the card in this frame.` : "Identify the card in this frame."
     }
     s = s.replace(/\b[a-z]{0,3}\d{1,3}\s*\/\s*[a-z]{0,3}\d{1,3}\b/g, " ");
     s = s.replace(/\b(psa|cgc|bgs|beckett|ace|tag)\s*\d{1,2}(\.5)?\b/g, " ").replace(/\b(gem\s*mint|mint|near\s*mint|nm|lp|mp|hp|dmg|damaged|slab(bed)?|graded|raw|pack\s*fresh)\b/g, " ").replace(/\b(holo(foil)?|reverse|foil|non[-\s]?holo|full\s*art|alt\s*art|secret\s*rare|ultra\s*rare|illustration\s*rare|promo)\b/g, " ").replace(/\b(pokemon|pok[eé]mon|tcg|card|cards|english|japanese|jpn|eng)\b/g, " ").replace(/\b(giveaway|break|spot|random|mystery|bundle|lot|x\d+)\b/g, " ").replace(/[^\w\s'&.-]/g, " ").replace(/\s+/g, " ").trim();
-    const words = s.split(" ").filter((w) => w && !/^\d+$/.test(w)).slice(0, 4);
-    return { name: words.join(" "), number, setTotal, setName: "" };
+    const words2 = s.split(" ").filter((w) => w && !/^\d+$/.test(w)).slice(0, 4);
+    return { name: words2.join(" "), number, setTotal, setName: "" };
   }
 
   // src/background.js
   var MAX_EDGE = 1568;
-  async function getApiKey() {
-    const { anthropicApiKey } = await chrome.storage.local.get("anthropicApiKey");
-    return (anthropicApiKey || "").trim();
+  if (serviceConfigured()) setTcgcsvBase(`${SERVICE_URL.replace(/\/$/, "")}/tcgcsv`);
+  var MODES = ["auto", "gemini", "claude"];
+  async function getSettings() {
+    const s = await chrome.storage.local.get(["mode", "provider", "geminiApiKey", "anthropicApiKey"]);
+    const mode = s.mode || s.provider;
+    return {
+      mode: MODES.includes(mode) ? mode : "auto",
+      geminiKey: (s.geminiApiKey || "").trim(),
+      claudeKey: (s.anthropicApiKey || "").trim()
+    };
+  }
+  async function getInstallId() {
+    const { installId } = await chrome.storage.local.get("installId");
+    if (installId) return installId;
+    const id = crypto.randomUUID();
+    await chrome.storage.local.set({ installId: id });
+    return id;
+  }
+  var NeedsSetupError = class extends Error {
+  };
+  var ON_DEVICE_PROBLEM = {
+    unsupported: "This browser doesn't include Chrome's built-in AI (Brave, Edge, and other Chromium browsers leave it out). Use Google Chrome, or add a free Gemini key in Settings.",
+    downloadable: "Chrome's on-device AI needs a one-time download. Start it in Settings.",
+    downloading: "Chrome is still downloading its on-device AI. Try again in a few minutes.",
+    unavailable: "This computer doesn't meet Chrome's requirements for on-device AI. Add a free Gemini key in Settings instead."
+  };
+  async function identifyAuto(image, hint) {
+    let onDeviceError = null;
+    const status = await onDeviceStatus();
+    if (status === "available") {
+      try {
+        const card = await identifyCardOnDevice(image, hint);
+        if (!(card.card_visible && card.confidence === "low") || !serviceConfigured()) return card;
+      } catch (e) {
+        onDeviceError = e;
+      }
+    }
+    if (serviceConfigured()) return identifyCardViaService(image, hint, await getInstallId());
+    if (onDeviceError) throw onDeviceError;
+    throw new NeedsSetupError(ON_DEVICE_PROBLEM[status] || ON_DEVICE_PROBLEM.unavailable);
+  }
+  async function identify(image, hint) {
+    const { mode, geminiKey, claudeKey } = await getSettings();
+    if (mode === "gemini") {
+      if (!geminiKey) throw new NeedsSetupError("Add your Gemini API key in Settings first.");
+      return identifyCardGemini(geminiKey, image, hint);
+    }
+    if (mode === "claude") {
+      if (!claudeKey) throw new NeedsSetupError("Add your Anthropic API key in Settings first.");
+      try {
+        return await identifyCard(claudeKey, image, hint);
+      } catch (err) {
+        throw new Error(describeApiError(err));
+      }
+    }
+    return identifyAuto(image, hint);
+  }
+  async function gradedFor(card, top, { lookup = false } = {}) {
+    const grade = parseGrade(card.grade_label);
+    if (!grade || !top) return null;
+    const out = { label: grade.label, ebayUrl: ebaySoldUrl(top.name, top.number, grade.label), price: null, count: null };
+    if (!top.productId) return out;
+    const read = card.number_legible !== false ? normalizeNumber(card.number) : "";
+    if (!read || normalizeNumber(top.number) !== read) {
+      out.reason = read ? "exact printing not found; check the list below" : "couldn't read the number";
+      return out;
+    }
+    const { pptApiKey } = await chrome.storage.local.get("pptApiKey");
+    const key = (pptApiKey || "").trim();
+    const cached = await gradedCacheGet(top.productId, grade.key);
+    if (cached) return Object.assign(out, cached);
+    if (!key && !serviceConfigured()) {
+      out.reason = "add a PokemonPriceTracker key in Settings for graded prices";
+      return out;
+    }
+    if (!lookup) {
+      out.canLoad = true;
+      return out;
+    }
+    try {
+      if (key) {
+        await chrome.storage.local.set({
+          lastGradedLookup: { productId: top.productId, grade: grade.label, card: `${top.name} #${top.number}` }
+        });
+        const { pptExhaustedUntil = 0 } = await chrome.storage.local.get("pptExhaustedUntil");
+        if (Date.now() < pptExhaustedUntil) {
+          out.reason = `PokemonPriceTracker daily limit reached (resets ${new Date(pptExhaustedUntil).toLocaleTimeString([], { hour: "numeric", minute: "2-digit" })})`;
+          return out;
+        }
+        const pptCard = await fetchGradedCard(key, top.productId);
+        const hit = pickGradedPrice(pptCard, grade.key);
+        if (hit) Object.assign(out, hit);
+        else out.reason = gradedMissingReason(pptCard);
+        await gradedCachePut(top.productId, grade.key, hit ? hit : { reason: out.reason });
+      } else {
+        const hit = await gradedViaService(top.productId, grade.key, await getInstallId());
+        if (hit) Object.assign(out, hit);
+        else out.reason = "no graded sales found";
+        await gradedCachePut(top.productId, grade.key, hit ? hit : { reason: out.reason });
+      }
+    } catch (e) {
+      out.reason = gradedErrorReason(e);
+      if (e && e.status === 429) {
+        const reset = /* @__PURE__ */ new Date();
+        reset.setUTCHours(24, 0, 0, 0);
+        await chrome.storage.local.set({ pptExhaustedUntil: reset.getTime() });
+        out.reason = `PokemonPriceTracker daily limit reached (resets ${reset.toLocaleTimeString([], { hour: "numeric", minute: "2-digit" })})`;
+      }
+    }
+    return out;
+  }
+  var GRADED_TTL_MS = 24 * 60 * 60 * 1e3;
+  var GRADED_CACHE_MAX = 300;
+  async function gradedCacheGet(productId, gradeKey) {
+    const { gradedCache = {} } = await chrome.storage.local.get("gradedCache");
+    const hit = gradedCache[`${productId}|${gradeKey}`];
+    return hit && Date.now() - hit.at < GRADED_TTL_MS ? hit.value : null;
+  }
+  async function gradedCachePut(productId, gradeKey, value) {
+    const { gradedCache = {} } = await chrome.storage.local.get("gradedCache");
+    gradedCache[`${productId}|${gradeKey}`] = { at: Date.now(), value };
+    const keys = Object.keys(gradedCache);
+    if (keys.length > GRADED_CACHE_MAX) {
+      keys.sort((a, b) => gradedCache[a].at - gradedCache[b].at);
+      for (const k of keys.slice(0, keys.length - GRADED_CACHE_MAX)) delete gradedCache[k];
+    }
+    await chrome.storage.local.set({ gradedCache });
+  }
+  function gradedMissingReason(pptCard) {
+    if (!pptCard) return "card not on PokemonPriceTracker";
+    if (!pptCard.ebay) return "no graded data from PokemonPriceTracker (may need a paid plan)";
+    return "no recent sales at this grade";
+  }
+  function gradedErrorReason(e) {
+    if (e && (e.status === 401 || e.status === 403)) return "PokemonPriceTracker rejected the key";
+    if (e && e.status === 402) return "graded prices need a paid PokemonPriceTracker plan";
+    if (e && e.status === 429) return "PokemonPriceTracker daily limit reached";
+    return "graded price lookup failed";
   }
   async function loadPriceApiKey() {
     const { pokemontcgApiKey } = await chrome.storage.local.get("pokemontcgApiKey");
@@ -17485,27 +18318,38 @@ Identify the card in this frame.` : "Identify the card in this frame."
         const image = await captureFrame(sender.tab.windowId, msg.rect, msg.dpr || 1);
         return { ok: true, image };
       }
-      case "identifyAndPrice": {
-        const apiKey = await getApiKey();
-        if (!apiKey) return { ok: false, needsKey: true, error: "Add your Anthropic API key in \u2699 settings first." };
-        let card;
+      case "identify": {
         try {
-          card = await identifyCard(apiKey, msg.image, msg.hint || "");
+          return { ok: true, card: await identify(msg.image, msg.hint || "") };
         } catch (err) {
-          return { ok: false, error: describeApiError(err) };
+          return { ok: false, needsSetup: err instanceof NeedsSetupError, error: String(err.message || err) };
         }
-        if (!card.card_visible || !card.name) return { ok: true, card, cards: [] };
+      }
+      case "price": {
+        const card = msg.card;
+        let result;
         try {
-          const result = await searchCards({
+          const numberOk = card.number_legible !== false;
+          result = await searchCards({
             name: card.name,
-            number: card.number,
+            number: numberOk ? card.number : "",
             setTotal: card.set_total,
-            setName: card.set_name
+            setName: card.set_name,
+            setCode: card.set_code,
+            language: card.language
           });
-          return { ok: true, card, cards: result.cards };
         } catch (err) {
-          return { ok: true, card, cards: [], priceError: String(err.message || err) };
+          return { ok: false, error: String(err.message || err) };
         }
+        const graded = card.graded ? await gradedFor(card, result.cards[0]) : null;
+        return { ok: true, cards: result.cards, cached: !!result.cached, priceLanguage: result.language || "English", graded };
+      }
+      case "graded": {
+        return { ok: true, graded: await gradedFor(msg.card, msg.top, { lookup: true }) };
+      }
+      case "warmUp": {
+        const { mode } = await getSettings();
+        return { ok: true, warmed: mode === "auto" && await warmUpOnDevice().catch(() => false) };
       }
       case "searchText": {
         const parsed = parseTitle(msg.text);
@@ -17514,15 +18358,13 @@ Identify the card in this frame.` : "Identify the card in this frame."
         return { ok: true, parsed, cards: result.cards };
       }
       case "getSettings": {
-        const key = await getApiKey();
-        return { ok: true, hasKey: !!key, model: MODEL };
+        const { mode, geminiKey, claudeKey } = await getSettings();
+        const onDevice = await onDeviceStatus();
+        const ready = mode === "gemini" ? !!geminiKey : mode === "claude" ? !!claudeKey : onDevice === "available" || serviceConfigured();
+        return { ok: true, mode, ready, onDevice, service: serviceConfigured() };
       }
-      case "saveApiKey": {
-        await chrome.storage.local.set({ anthropicApiKey: (msg.key || "").trim() });
-        return { ok: true };
-      }
-      case "savePriceApiKey": {
-        await chrome.storage.local.set({ pokemontcgApiKey: (msg.key || "").trim() });
+      case "openOptions": {
+        await chrome.runtime.openOptionsPage();
         return { ok: true };
       }
     }
@@ -17531,5 +18373,8 @@ Identify the card in this frame.` : "Identify the card in this frame."
   chrome.runtime.onMessage.addListener((msg, sender, sendResponse) => {
     handle(msg, sender).then(sendResponse).catch((err) => sendResponse({ ok: false, error: String(err && err.message ? err.message : err) }));
     return true;
+  });
+  chrome.runtime.onInstalled.addListener(({ reason }) => {
+    if (reason === "install") chrome.runtime.openOptionsPage();
   });
 })();

@@ -1,0 +1,85 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Card Price Checker Settings</title>
+  <link rel="stylesheet" href="options.css">
+</head>
+<body>
+  <main>
+    <h1>💰 Card Price Checker</h1>
+    <p class="lede">Scan the Pokémon card on a Whatnot stream and see its market price.</p>
+
+    <section>
+      <h2>Card recognition</h2>
+
+      <label class="mode">
+        <input type="radio" name="mode" value="auto">
+        <span>
+          <strong>Automatic</strong> <span class="tag tag-free">no key needed</span><br>
+          <span class="sub">Uses Chrome's built-in AI on this computer when it can, and our free card-ID service otherwise.</span>
+        </span>
+      </label>
+      <div class="panel" data-for="auto">
+        <div class="row"><span>On-device AI</span><span id="od-status" class="status">Checking…</span></div>
+        <p id="od-note" class="sub" hidden></p>
+        <div id="od-download" hidden>
+          <p class="sub">Chrome can download its built-in AI model once (a few GB) and then read cards offline, for free, without sending frames anywhere.</p>
+          <button id="od-button" class="secondary">Download on-device AI</button>
+          <progress id="od-progress" max="1" value="0" hidden></progress>
+        </div>
+        <div class="row"><span>Card-ID service</span><span id="svc-status" class="status">Checking…</span></div>
+      </div>
+
+      <label class="mode">
+        <input type="radio" name="mode" value="gemini">
+        <span><strong>My own Gemini key</strong> <span class="tag tag-free">free tier</span></span>
+      </label>
+      <div class="panel" data-for="gemini">
+        <input id="gemini-key" type="password" placeholder="AIza… (leave blank to keep the saved key)" autocomplete="off" spellcheck="false">
+        <p class="sub">Get one free at <a href="https://aistudio.google.com" target="_blank" rel="noopener">aistudio.google.com</a> → Get API key. <span id="gemini-saved" class="saved" hidden>✓ key saved</span></p>
+      </div>
+
+      <label class="mode">
+        <input type="radio" name="mode" value="claude">
+        <span><strong>My own Claude key</strong> <span class="tag">~1¢ per scan</span></span>
+      </label>
+      <div class="panel" data-for="claude">
+        <input id="claude-key" type="password" placeholder="sk-ant-… (leave blank to keep the saved key)" autocomplete="off" spellcheck="false">
+        <p class="sub">From <a href="https://console.anthropic.com" target="_blank" rel="noopener">console.anthropic.com</a> → API Keys. Most accurate on blurry or angled cards. <span id="claude-saved" class="saved" hidden>✓ key saved</span></p>
+      </div>
+    </section>
+
+    <section>
+      <h2>Prices</h2>
+      <label class="field">
+        <span>pokemontcg.io API key <span class="sub">(optional, free: steadier price lookups)</span></span>
+        <input id="price-key" type="password" placeholder="optional" autocomplete="off" spellcheck="false">
+      </label>
+      <span id="price-saved" class="saved" hidden>✓ key saved</span>
+      <label class="field" style="margin-top:12px">
+        <span>PokemonPriceTracker API key <span class="sub">(optional: graded PSA / CGC / BGS prices; free at <a href="https://www.pokemonpricetracker.com/api" target="_blank" rel="noopener">pokemonpricetracker.com</a>)</span></span>
+        <input id="ppt-key" type="password" placeholder="optional" autocomplete="off" spellcheck="false">
+      </label>
+      <span id="ppt-saved" class="saved" hidden>✓ key saved</span>
+      <div class="actions" style="margin:10px 0 0">
+        <button id="ppt-test" class="secondary">Test graded prices</button>
+        <span id="ppt-test-msg" class="sub"></span>
+      </div>
+      <pre id="ppt-test-out" hidden></pre>
+    </section>
+
+    <div class="actions">
+      <button id="save">Save settings</button>
+      <span id="msg" class="sub"></span>
+    </div>
+
+    <section class="privacy">
+      <h2>Privacy</h2>
+      <p class="sub">When you press Scan, the extension takes one screenshot of the stream video. With on-device AI it never leaves your computer. Otherwise it is sent to the service you chose (our card-ID service, Google Gemini, or Anthropic Claude) only to identify the card, and nothing is stored. Card names are looked up on pokemontcg.io and TCGCSV, and graded prices on PokemonPriceTracker. Keys you enter are stored only in this browser.</p>
+    </section>
+  </main>
+  <script src="options.js"></script>
+</body>
+</html>

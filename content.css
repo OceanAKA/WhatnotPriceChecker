@@ -210,47 +210,6 @@
   display: none !important;
 }
 
-.wnpc-settings {
-  display: flex;
-  flex-direction: column;
-  gap: 6px;
-  padding: 8px;
-  background: #1d1e25;
-  border: 1px solid #2c2e37;
-  border-radius: 10px;
-}
-
-.wnpc-label {
-  font-weight: 700;
-  font-size: 12px;
-}
-
-.wnpc-hint {
-  color: #8b8d98;
-  font-size: 11px;
-}
-
-#wnpc-key {
-  flex: 1;
-  min-width: 0;
-  padding: 7px 9px;
-  border: 1px solid #3a3c46;
-  border-radius: 8px;
-  background: #101116;
-  color: #e8e8ea;
-  outline: none;
-}
-
-.wnpc-settings button {
-  padding: 7px 10px;
-  border: none;
-  border-radius: 8px;
-  background: #ffd53d;
-  color: #1a1a1a;
-  font-weight: 700;
-  cursor: pointer;
-}
-
 .wnpc-scan {
   width: 100%;
   padding: 10px;
@@ -326,8 +285,68 @@
 .wnpc-conf-medium { background: #3d361f; color: #ffd53d; }
 .wnpc-conf-low { background: #3d1f1f; color: #ff8a80; }
 
-.wnpc-warn {
+
+
+.wnpc-timing {
   margin-top: 3px;
-  color: #ffb86b;
-  font-size: 11px;
+  color: #6f717c;
+  font-size: 10px;
+}
+
+.wnpc-chips {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 4px;
+  margin-top: 3px;
+}
+
+.wnpc-chip {
+  padding: 0 6px;
+  border-radius: 4px;
+  background: #2b2d36;
+  color: #c9cbd4;
+  font-size: 10px;
+  font-weight: 700;
+}
+
+.wnpc-chip-grade {
+  background: #3d361f;
+  color: #ffd53d;
+}
+
+.wnpc-graded .wnpc-vname {
+  color: #ffd53d;
+  font-weight: 700;
+}
+
+.wnpc-graded .wnpc-market {
+  color: #ffd53d;
+  font-size: 15px;
+}
+
+.wnpc-reason {
+  color: #8b8d98;
+  font-size: 10px;
+  margin-top: -1px;
+}
+
+.wnpc-load {
+  padding: 2px 8px;
+  border: 1px solid #ffd53d;
+  border-radius: 6px;
+  background: transparent;
+  color: #ffd53d;
+  font: inherit;
+  font-size: 12px;
+  font-weight: 700;
+  cursor: pointer;
+}
+
+.wnpc-load:hover {
+  background: #3d361f;
+}
+
+.wnpc-load:disabled {
+  opacity: 0.6;
+  cursor: progress;
 }
