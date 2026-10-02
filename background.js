@@ -17428,19 +17428,25 @@ Identify the card in this frame.` : "Identify the card in this frame.";
       return FALLBACK_MODELS;
     }
   }
-  var noThinkingConfig = /* @__PURE__ */ new Set();
+  var THINKING_LEVELS = ["minimal", "low", null];
+  var thinkingLevel = /* @__PURE__ */ new Map();
+  var REQUEST_TIMEOUT_MS = 12e3;
+  var SLOW_COOLDOWN_MS = 2 * 60 * 1e3;
+  var NO_MINIMAL = /^gemini-3\.[78]-flash$/;
   async function callModel(apiKey, model, imageBase64, listingHint) {
-    try {
-      return await callModelOnce(apiKey, model, imageBase64, listingHint, !noThinkingConfig.has(model));
-    } catch (e) {
-      if (e instanceof GeminiError && e.status === 400 && /thinking/i.test(e.message) && !noThinkingConfig.has(model)) {
-        noThinkingConfig.add(model);
-        return callModelOnce(apiKey, model, imageBase64, listingHint, false);
+    const first = thinkingLevel.has(model) ? thinkingLevel.get(model) : NO_MINIMAL.test(model) ? 1 : 0;
+    for (let i = first; i < THINKING_LEVELS.length; i++) {
+      try {
+        const card = await callModelOnce(apiKey, model, imageBase64, listingHint, THINKING_LEVELS[i]);
+        thinkingLevel.set(model, i);
+        return card;
+      } catch (e) {
+        const rejectedLevel = e instanceof GeminiError && e.status === 400 && !/api key/i.test(e.message);
+        if (!rejectedLevel || i === THINKING_LEVELS.length - 1) throw e;
       }
-      throw e;
     }
   }
-  async function callModelOnce(apiKey, model, imageBase64, listingHint, lowThinking) {
+  async function callModelOnce(apiKey, model, imageBase64, listingHint, level) {
     const body = {
       systemInstruction: { parts: [{ text: SYSTEM }] },
       contents: [
@@ -17455,14 +17461,25 @@ Identify the card in this frame.` : "Identify the card in this frame.";
       generationConfig: {
         responseMimeType: "application/json",
         responseSchema: geminiSchema(CARD_SCHEMA),
-        ...lowThinking ? { thinkingConfig: { thinkingLevel: "low" } } : {}
+        ...level ? { thinkingConfig: { thinkingLevel: level } } : {}
       }
     };
-    const res = await fetch(`${BASE}/models/${model}:generateContent`, {
-      method: "POST",
-      headers: { "content-type": "application/json", "x-goog-api-key": apiKey },
-      body: JSON.stringify(body)
-    });
+    const controller = new AbortController();
+    const timer = setTimeout(() => controller.abort(), REQUEST_TIMEOUT_MS);
+    let res;
+    try {
+      res = await fetch(`${BASE}/models/${model}:generateContent`, {
+        signal: controller.signal,
+        method: "POST",
+        headers: { "content-type": "application/json", "x-goog-api-key": apiKey },
+        body: JSON.stringify(body)
+      });
+    } catch (e) {
+      if (e && e.name === "AbortError") throw new GeminiError(`${model} took over ${REQUEST_TIMEOUT_MS / 1e3}s`, 504);
+      throw e;
+    } finally {
+      clearTimeout(timer);
+    }
     const json = await res.json().catch(() => ({}));
     if (!res.ok) {
       const msg = json.error && json.error.message || `HTTP ${res.status}`;
@@ -17484,13 +17501,17 @@ Identify the card in this frame.` : "Identify the card in this frame.";
     const order = ready.length ? ready : models;
     let quotaHit = false;
     let lastError = null;
+    const trace = [];
     for (const model of order) {
+      const started = Date.now();
       try {
         const card = await callModel(apiKey, model, imageBase64, listingHint);
-        return { ...card, model };
+        trace.push({ model, ms: Date.now() - started });
+        return { ...card, model, trace };
       } catch (e) {
         lastError = e;
         const status = e instanceof GeminiError ? e.status : 0;
+        trace.push({ model, ms: Date.now() - started, status });
         if (status === 400 && /api key/i.test(e.message)) {
           throw new GeminiError("Invalid Gemini API key. Check it in \u2699 settings.", 400);
         }
@@ -17500,6 +17521,10 @@ Identify the card in this frame.` : "Identify the card in this frame.";
         if (status === 429) {
           quotaHit = true;
           cooldownUntil.set(model, Date.now() + COOLDOWN_MS);
+          continue;
+        }
+        if (status === 504) {
+          cooldownUntil.set(model, Date.now() + SLOW_COOLDOWN_MS);
           continue;
         }
         if (status === 404 || status >= 500) continue;
@@ -17806,7 +17831,7 @@ Identify the card in this frame.` : "Identify the card in this frame.";
 
   // src/tcgcsv.js
   var DIRECT = "https://tcgcsv.com/tcgplayer";
-  var USER_AGENT = "WhatnotPriceChecker/3.2.2 (+https://github.com/OceanAKA/WhatnotPriceChecker)";
+  var USER_AGENT = "WhatnotPriceChecker/3.2.3 (+https://github.com/OceanAKA/WhatnotPriceChecker)";
   var base = DIRECT;
   function setTcgcsvBase(url) {
     base = url || DIRECT;

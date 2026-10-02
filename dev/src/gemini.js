@@ -72,21 +72,35 @@ async function listModels(apiKey) {
 }
 
 // Card reading doesn't need deep reasoning; low thinking cuts latency a lot.
-const noThinkingConfig = new Set(); // models that rejected thinkingConfig
+// Lightest thinking level each model accepts: "minimal" where supported (and
+// the default on Flash-Lite), else "low", else the model's own default.
+const THINKING_LEVELS = ["minimal", "low", null];
+const thinkingLevel = new Map(); // model -> index into THINKING_LEVELS that it accepted
+
+// A stalled request on a busy free tier shouldn't hold the scan; move to the next model.
+const REQUEST_TIMEOUT_MS = 12000;
+const SLOW_COOLDOWN_MS = 2 * 60 * 1000;
+
+// Per Google's docs, 3.7 / 3.8 Flash don't accept "minimal"; start them at "low" so a
+// fresh background worker (Chrome restarts it after ~30 s idle) doesn't waste a request.
+const NO_MINIMAL = /^gemini-3\.[78]-flash$/;
 
 async function callModel(apiKey, model, imageBase64, listingHint) {
-  try {
-    return await callModelOnce(apiKey, model, imageBase64, listingHint, !noThinkingConfig.has(model));
-  } catch (e) {
-    if (e instanceof GeminiError && e.status === 400 && /thinking/i.test(e.message) && !noThinkingConfig.has(model)) {
-      noThinkingConfig.add(model);
-      return callModelOnce(apiKey, model, imageBase64, listingHint, false);
+  const first = thinkingLevel.has(model) ? thinkingLevel.get(model) : NO_MINIMAL.test(model) ? 1 : 0;
+  for (let i = first; i < THINKING_LEVELS.length; i++) {
+    try {
+      const card = await callModelOnce(apiKey, model, imageBase64, listingHint, THINKING_LEVELS[i]);
+      thinkingLevel.set(model, i);
+      return card;
+    } catch (e) {
+      // Any 400 other than a bad key is most likely the thinking level; try a lighter config.
+      const rejectedLevel = e instanceof GeminiError && e.status === 400 && !/api key/i.test(e.message);
+      if (!rejectedLevel || i === THINKING_LEVELS.length - 1) throw e;
     }
-    throw e;
   }
 }
 
-async function callModelOnce(apiKey, model, imageBase64, listingHint, lowThinking) {
+async function callModelOnce(apiKey, model, imageBase64, listingHint, level) {
   const body = {
     systemInstruction: { parts: [{ text: SYSTEM }] },
     contents: [
@@ -101,14 +115,25 @@ async function callModelOnce(apiKey, model, imageBase64, listingHint, lowThinkin
     generationConfig: {
       responseMimeType: "application/json",
       responseSchema: geminiSchema(CARD_SCHEMA),
-      ...(lowThinking ? { thinkingConfig: { thinkingLevel: "low" } } : {}),
+      ...(level ? { thinkingConfig: { thinkingLevel: level } } : {}),
     },
   };
-  const res = await fetch(`${BASE}/models/${model}:generateContent`, {
-    method: "POST",
-    headers: { "content-type": "application/json", "x-goog-api-key": apiKey },
-    body: JSON.stringify(body),
-  });
+  const controller = new AbortController();
+  const timer = setTimeout(() => controller.abort(), REQUEST_TIMEOUT_MS);
+  let res;
+  try {
+    res = await fetch(`${BASE}/models/${model}:generateContent`, {
+      signal: controller.signal,
+      method: "POST",
+      headers: { "content-type": "application/json", "x-goog-api-key": apiKey },
+      body: JSON.stringify(body),
+    });
+  } catch (e) {
+    if (e && e.name === "AbortError") throw new GeminiError(`${model} took over ${REQUEST_TIMEOUT_MS / 1000}s`, 504);
+    throw e;
+  } finally {
+    clearTimeout(timer);
+  }
   const json = await res.json().catch(() => ({}));
   if (!res.ok) {
     const msg = (json.error && json.error.message) || `HTTP ${res.status}`;
@@ -140,13 +165,17 @@ export async function identifyCardGemini(apiKey, imageBase64, listingHint = "") 
 
   let quotaHit = false;
   let lastError = null;
+  const trace = []; // which models were tried and how long each took, shown when a scan is slow
   for (const model of order) {
+    const started = Date.now();
     try {
       const card = await callModel(apiKey, model, imageBase64, listingHint);
-      return { ...card, model };
+      trace.push({ model, ms: Date.now() - started });
+      return { ...card, model, trace };
     } catch (e) {
       lastError = e;
       const status = e instanceof GeminiError ? e.status : 0;
+      trace.push({ model, ms: Date.now() - started, status });
       if (status === 400 && /api key/i.test(e.message)) {
         throw new GeminiError("Invalid Gemini API key. Check it in ⚙ settings.", 400);
       }
@@ -156,6 +185,10 @@ export async function identifyCardGemini(apiKey, imageBase64, listingHint = "") 
       if (status === 429) {
         quotaHit = true;
         cooldownUntil.set(model, Date.now() + COOLDOWN_MS);
+        continue;
+      }
+      if (status === 504) {
+        cooldownUntil.set(model, Date.now() + SLOW_COOLDOWN_MS);
         continue;
       }
       // Model retired, overloaded, or a transient server error: try the next one.

@@ -265,6 +265,10 @@
     const el = seen.querySelector(".wnpc-timing");
     if (!el) return;
     const parts = [`capture ${secs(t.capture)}`, `AI ${secs(t.ai)}`];
+    if (t.ai > 8000 && t.trace && t.trace.length) {
+      const tried = t.trace.map((x) => `${x.model.replace(/^gemini-/, "")} ${x.status ? x.status : secs(x.ms)}`);
+      parts[1] += ` (${tried.join(" → ")})`;
+    }
     if (t.price != null) parts.push(`prices ${t.cached ? "cached" : secs(t.price)}`);
     el.textContent = parts.join(" · ");
   }
@@ -288,6 +292,7 @@
       start = performance.now();
       const resp = await send({ type: "identify", image: frame.image, hint: listingHint() });
       t.ai = performance.now() - start;
+      t.trace = resp && resp.card ? resp.card.trace : null;
       if (!resp || !resp.ok) {
         if (resp && resp.needsSetup) showSetupNeeded(resp.error);
         else status.textContent = resp ? resp.error : "No response from the extension.";

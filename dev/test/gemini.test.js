@@ -50,3 +50,64 @@ try {
 } catch (e) {
   ok(/Invalid Gemini API key/.test(e.message), `bad key message: "${e.message}"`);
 }
+
+// Thinking level: "minimal" first, falling back when a model rejects it.
+{
+  const levels = [];
+  globalThis.fetch = async (url, init = {}) => {
+    url = String(url);
+    if (url.includes("/models?")) return json(200, { models: [{ name: "models/gemini-3.8-flash", supportedGenerationMethods: ["generateContent"] }] });
+    const body = JSON.parse(init.body);
+    if (url.includes("gemini-3.5-flash")) {
+      const lv = body.generationConfig.thinkingConfig && body.generationConfig.thinkingConfig.thinkingLevel;
+      levels.push(lv || "none");
+      if (lv === "minimal") return json(400, { error: { code: 400, message: "Invalid value at generation_config", status: "INVALID_ARGUMENT" } });
+      return json(200, { candidates: [{ content: { parts: [{ text: JSON.stringify(CARD) }] } }] });
+    }
+    const level = body.generationConfig.thinkingConfig && body.generationConfig.thinkingConfig.thinkingLevel;
+    levels.push(level || "none");
+    if (level === "minimal") return json(400, { error: { code: 400, message: "thinking_level minimal is not supported for this model", status: "INVALID_ARGUMENT" } });
+    return json(200, { candidates: [{ content: { parts: [{ text: JSON.stringify(CARD) }] } }] });
+  };
+  const c = await identifyCardGemini("good2", "AAAA", "");
+  ok(c.name === "Charizard ex" && levels.join(",") === "low", `3.8 Flash starts at "low" (${levels.join(" -> ")})`);
+  levels.length = 0;
+  await identifyCardGemini("good2", "AAAA", "");
+  ok(levels.join(",") === "low", `remembers the accepted level next time (${levels.join(",")})`);
+  ok(Array.isArray(c.trace) && c.trace[0].model === "gemini-3.8-flash", "trace lists the model that answered");
+}
+
+// A stalled model is abandoned and the next one answers.
+{
+  globalThis.fetch = async (url, init = {}) => {
+    url = String(url);
+    if (url.includes("/models?")) return json(200, { models: [
+      { name: "models/gemini-3.7-flash", supportedGenerationMethods: ["generateContent"] },
+      { name: "models/gemini-3.6-flash", supportedGenerationMethods: ["generateContent"] },
+    ] });
+    if (url.includes("gemini-3.7-flash")) {
+      return new Promise((_, reject) => init.signal.addEventListener("abort", () => reject(Object.assign(new Error("aborted"), { name: "AbortError" }))));
+    }
+    return json(200, { candidates: [{ content: { parts: [{ text: JSON.stringify(CARD) }] } }] });
+  };
+  const t0 = Date.now();
+  const c = await identifyCardGemini("good3", "AAAA", "");
+  const took = Date.now() - t0;
+  ok(c.model === "gemini-3.6-flash" && c.trace[0].status === 504 && took < 14000, `stalled model abandoned after ~12s, next model answered (${(took / 1000).toFixed(1)}s, ${c.trace.map((x) => x.model + ":" + (x.status || x.ms + "ms")).join(", ")})`);
+}
+
+// Other models try "minimal" first; any non-key 400 falls back (Google's wording may vary).
+{
+  const levels = [];
+  globalThis.fetch = async (url, init = {}) => {
+    url = String(url);
+    if (url.includes("/models?")) return json(200, { models: [{ name: "models/gemini-3.5-flash", supportedGenerationMethods: ["generateContent"] }] });
+    const body = JSON.parse(init.body);
+    const lv = body.generationConfig.thinkingConfig && body.generationConfig.thinkingConfig.thinkingLevel;
+    levels.push(lv || "none");
+    if (lv === "minimal") return json(400, { error: { code: 400, message: "Invalid value at generation_config", status: "INVALID_ARGUMENT" } });
+    return json(200, { candidates: [{ content: { parts: [{ text: JSON.stringify(CARD) }] } }] });
+  };
+  const c = await identifyCardGemini("good4", "AAAA", "");
+  ok(c.name === "Charizard ex" && levels.join(",") === "minimal,low", `3.5 Flash: minimal rejected (other wording) -> low (${levels.join(" -> ")})`);
+}
