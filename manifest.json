@@ -1,7 +1,7 @@
 {
   "manifest_version": 3,
   "name": "Card Price Checker for Whatnot",
-  "version": "3.2.5",
+  "version": "3.3.0",
   "description": "Scan the Pokémon card on a Whatnot stream and see its TCGplayer price, incl. Japanese cards and graded slabs. No API key needed.",
   "icons": {
     "16": "icons/icon16.png",

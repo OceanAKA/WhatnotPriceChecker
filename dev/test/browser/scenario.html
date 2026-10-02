@@ -1,0 +1,27 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <title>Auto-scan scenario</title>
+  <link rel="stylesheet" href="../../../content.css">
+  <script>
+    // Auto-scan pauses when the page is hidden; test runs may happen in a background tab.
+    Object.defineProperty(document, "visibilityState", { get: () => "visible" });
+  </script>
+  <style>
+    body { margin: 0; background: #0b0b0e; color: #ddd; font: 13px system-ui, sans-serif; }
+    #stream { display: block; width: 360px; height: 640px; background: #000; }
+    #summary { padding: 8px; }
+  </style>
+</head>
+<body>
+  <video id="stream" muted autoplay playsinline></video>
+  <div id="summary">Running…</div>
+  <script src="stream.js"></script>
+  <!-- `?content=` lets you compare another build of the panel script, e.g. an older release -->
+  <script>
+    const src = new URLSearchParams(location.search).get("content") || "../../../content.js";
+    document.write(`<script src="${src.replace(/"/g, "")}"><\/script>`);
+  </script>
+</body>
+</html>

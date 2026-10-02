@@ -421,8 +421,8 @@
 
   // ---------- auto-scan: scan when a new card is held up ----------
   //
-  // A tiny grayscale copy of the video is sampled a few times a second and
-  // averaged into coarse blocks. Holo and full-art cards sparkle and flash with
+  // A tiny copy of the video is sampled a few times a second and averaged into
+  // coarse color blocks. Holo and full-art cards sparkle and flash with
   // every small hand movement, so each sample is compared with a running
   // average of recent samples: glints average out, while a new card shifts the
   // average and keeps it shifted. A scan fires when the averaged picture differs
@@ -441,13 +441,15 @@
   const AVG_WEIGHT = 0.3; // weight of each new sample in the running average
   const BLOCK_DELTA = 22; // brightness change that counts as "this block changed"
   const SETTLED = 0.15; // live vs. average: at most this share of blocks off (sparkle and jitter allowed)
-  // A card usually fills only 10-30% of the frame, so a modest share of changed blocks means "new card".
-  const NEW_SCENE = 0.08; // average now vs. average at the last scan
   const DRIFT = 0.04; // the average itself may barely move while settling (a moving card keeps shifting it)
+  // "New card" is judged on a 6x8 color grid, coarse enough that sway and shimmer
+  // don't count but a different card does (a card usually fills 10-30% of the frame).
   // A swaying hand-held card may never settle: once a new card has been on screen
-  // this long, scan anyway. "New" is judged on a 6x8 grid so sway doesn't count.
+  // for PERSIST_MS, scan anyway.
   const PERSIST_MS = 3500;
   const NEW_COARSE = 0.1;
+  const COARSE_DELTA = 32; // larger than BLOCK_DELTA: foil shimmer shifts colors a little, a different card a lot
+  const MID_MOTION = 0.3; // live vs. average above this means a card is being moved in or out right now
   const FALLBACK_MS = 15000; // when the video's pixels can't be read
 
   const sampler = document.createElement("canvas");
@@ -457,7 +459,11 @@
   const GW = SAMPLE_W / BLOCK_W;
   const GH = SAMPLE_H / BLOCK_H;
 
-  /** Coarse grayscale blocks of the current frame, null if no video, "unreadable" if blocked. */
+  /**
+   * Coarse color blocks of the current frame ([r, g, b] per block), null if no
+   * video, "unreadable" if blocked. Color, not just brightness: two different
+   * cards can be equally bright in the same spot.
+   */
   function sampleFrame() {
     const stream = findStream();
     if (!stream || stream.video.readyState < 2) return null;
@@ -468,12 +474,15 @@
     } catch {
       return "unreadable";
     }
-    const blocks = new Float32Array(GW * GH);
+    const blocks = new Float32Array(GW * GH * 3);
+    const share = 1 / (BLOCK_W * BLOCK_H);
     for (let y = 0; y < SAMPLE_H; y++) {
       for (let x = 0; x < SAMPLE_W; x++) {
         const i = (y * SAMPLE_W + x) * 4;
-        const gray = (px[i] * 3 + px[i + 1] * 6 + px[i + 2]) / 10;
-        blocks[Math.floor(y / BLOCK_H) * GW + Math.floor(x / BLOCK_W)] += gray / (BLOCK_W * BLOCK_H);
+        const b = (Math.floor(y / BLOCK_H) * GW + Math.floor(x / BLOCK_W)) * 3;
+        blocks[b] += px[i] * share;
+        blocks[b + 1] += px[i + 1] * share;
+        blocks[b + 2] += px[i + 2] * share;
       }
     }
     return blocks;
@@ -481,15 +490,39 @@
 
   /** 12x16 blocks -> 6x8 blocks (2x2 averages), coarse enough that a few cm of sway barely changes it. */
   function coarser(a) {
-    const out = new Float32Array((GW / 2) * (GH / 2));
-    for (let y = 0; y < GH; y++) for (let x = 0; x < GW; x++) out[(y >> 1) * (GW / 2) + (x >> 1)] += a[y * GW + x] / 4;
+    const out = new Float32Array((GW / 2) * (GH / 2) * 3);
+    for (let y = 0; y < GH; y++) {
+      for (let x = 0; x < GW; x++) {
+        const from = (y * GW + x) * 3;
+        const to = ((y >> 1) * (GW / 2) + (x >> 1)) * 3;
+        for (let c = 0; c < 3; c++) out[to + c] += a[from + c] / 4;
+      }
+    }
     return out;
   }
 
-  function changedShare(a, b) {
+  /**
+   * Share of blocks whose brightness moved by more than BLOCK_DELTA. Used for
+   * "is it held still?": foil sparkle swings individual colors a lot but
+   * averages out in brightness.
+   */
+  function brightnessShare(a, b) {
     let n = 0;
-    for (let i = 0; i < a.length; i++) if (Math.abs(a[i] - b[i]) > BLOCK_DELTA) n++;
-    return n / a.length;
+    for (let i = 0; i < a.length; i += 3) {
+      const la = (a[i] * 3 + a[i + 1] * 6 + a[i + 2]) / 10;
+      const lb = (b[i] * 3 + b[i + 1] * 6 + b[i + 2]) / 10;
+      if (Math.abs(la - lb) > BLOCK_DELTA) n++;
+    }
+    return n / (a.length / 3);
+  }
+
+  /** Share of blocks where any color channel moved by more than `delta`. Used for "is it a different card?". */
+  function changedShare(a, b, delta = BLOCK_DELTA) {
+    let n = 0;
+    for (let i = 0; i < a.length; i += 3) {
+      if (Math.abs(a[i] - b[i]) > delta || Math.abs(a[i + 1] - b[i + 1]) > delta || Math.abs(a[i + 2] - b[i + 2]) > delta) n++;
+    }
+    return n / (a.length / 3);
   }
 
   let autoTimer = null;
@@ -521,16 +554,19 @@
     }
     if (!cur) return;
     if (!average) {
+      // The frame when auto-scan was switched on (and scanned) is the baseline: only new cards scan after this.
       average = Float32Array.from(cur);
+      scannedAverage = Float32Array.from(cur);
       return;
     }
-    const settled = changedShare(cur, average) <= SETTLED;
+    const motion = brightnessShare(cur, average);
+    const settled = motion <= SETTLED;
     for (let i = 0; i < cur.length; i++) average[i] += AVG_WEIGHT * (cur[i] - average[i]);
 
-    const newCoarse = !scannedAverage || changedShare(coarser(average), coarser(scannedAverage)) > NEW_COARSE;
+    const newCoarse = !scannedAverage || changedShare(coarser(average), coarser(scannedAverage), COARSE_DELTA) > NEW_COARSE;
     if (!newCoarse) newSince = 0;
     else if (!newSince) newSince = now;
-    if (newSince && now - newSince >= PERSIST_MS && now - lastAutoScan >= MIN_GAP_MS) {
+    if (newSince && now - newSince >= PERSIST_MS && motion <= MID_MOTION && now - lastAutoScan >= MIN_GAP_MS) {
       triggerAutoScan(now);
       return;
     }
@@ -544,14 +580,13 @@
       averageAtSettle = Float32Array.from(average);
       return;
     }
-    if (changedShare(average, averageAtSettle) > DRIFT) {
+    if (brightnessShare(average, averageAtSettle) > DRIFT) {
       // Still drifting (the card is moving): restart the settle window from here.
       settledSince = now;
       averageAtSettle = Float32Array.from(average);
       return;
     }
-    const isNew = !scannedAverage || changedShare(average, scannedAverage) > NEW_SCENE;
-    if (isNew && now - settledSince >= SETTLE_MS && now - lastAutoScan >= MIN_GAP_MS) triggerAutoScan(now);
+    if (newCoarse && now - settledSince >= SETTLE_MS && now - lastAutoScan >= MIN_GAP_MS) triggerAutoScan(now);
   }
 
   autoBox.addEventListener("change", () => {
@@ -561,6 +596,8 @@
     settledSince = lastAutoScan = newSince = 0;
     if (autoBox.checked) {
       status.textContent = "Auto-scan on: hold a card up to the camera.";
+      lastAutoScan = performance.now();
+      scan({ auto: true }); // whatever is on screen right now, then only new cards
       autoTimer = setInterval(autoTick, SAMPLE_MS);
     }
   });

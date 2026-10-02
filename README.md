@@ -58,14 +58,14 @@ ignores the title and reads the card from the video itself.
    printing. If the browser won't expose the video's pixels, it falls back to
    a tab screenshot cropped to the player.
 
-   With **auto-scan** on, a small grayscale copy of the video is sampled four
-   times a second and compared with a running average of recent samples, so
-   the sparkle and flashing of holo and full-art cards average out while a new
-   card shifts the average. A scan fires when the averaged picture differs from
-   the one at the last scan and has stopped moving for about a second. The AI
-   reports whether it is looking at a card's front, its back, or nothing; backs
-   and empty frames are ignored so the last real card stays on screen, and the
-   same card shown again isn't re-priced.
+   With **auto-scan** on, a small copy of the video is sampled four times a
+   second and averaged into coarse blocks. Stillness is judged on brightness
+   (foil sparkle averages out) and "is this a different card?" on color, on a
+   grid coarse enough that hand sway doesn't count. A scan fires when a new
+   card has settled for under a second, or after a few seconds if it keeps
+   swaying in the hand. The AI reports whether it sees a card's front, its
+   back, or nothing; backs and empty frames are ignored so the last real card
+   stays on screen, and the same card shown again isn't re-priced.
 3. **Identify the card.** Every model gets the same system prompt and a JSON
    schema that forces a fixed answer shape (`card_visible`, `name`, `number`,
    `set_total`, `set_name`, `language`, `graded`, `grade_label`, `confidence`,
@@ -147,6 +147,7 @@ npm install
 npm run build        # bundles src/ into ../background.js
 npm test             # offline checks: Claude, Gemini, on-device routing, card-ID service
 npm run test:prices  # live check against the Pokémon TCG API
+npm run test:browser # auto-scan tests: open the printed URL in Chrome
 npm run package      # zip for the Chrome Web Store -> dev/dist/
 ```
 

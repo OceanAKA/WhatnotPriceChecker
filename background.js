@@ -17836,7 +17836,7 @@ Identify the card in this frame.` : "Identify the card in this frame.";
 
   // src/tcgcsv.js
   var DIRECT = "https://tcgcsv.com/tcgplayer";
-  var USER_AGENT = "WhatnotPriceChecker/3.2.5 (+https://github.com/OceanAKA/WhatnotPriceChecker)";
+  var USER_AGENT = "WhatnotPriceChecker/3.3.0 (+https://github.com/OceanAKA/WhatnotPriceChecker)";
   var base = DIRECT;
   function setTcgcsvBase(url) {
     base = url || DIRECT;

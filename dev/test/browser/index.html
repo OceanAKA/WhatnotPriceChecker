@@ -1,0 +1,108 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Auto-scan browser tests</title>
+  <style>
+    :root { --bg: #101116; --card: #17181c; --line: #2c2e37; --text: #e8e8ea; --muted: #a8aab3; --good: #7ee787; --bad: #ff8a80; --accent: #ffd53d; }
+    * { box-sizing: border-box; }
+    body { margin: 0; background: var(--bg); color: var(--text); font: 14px/1.5 system-ui, "Segoe UI", sans-serif; }
+    main { max-width: 980px; margin: 0 auto; padding: 24px 16px 48px; }
+    h1 { margin: 0 0 4px; font-size: 22px; }
+    .sub { color: var(--muted); font-size: 13px; }
+    .bar { display: flex; gap: 10px; align-items: center; flex-wrap: wrap; margin: 16px 0; }
+    button { padding: 8px 14px; border: 0; border-radius: 8px; background: var(--accent); color: #1a1a1a; font: inherit; font-weight: 700; cursor: pointer; }
+    button:disabled { opacity: .6; cursor: progress; }
+    input { padding: 7px 9px; border: 1px solid var(--line); border-radius: 8px; background: #0b0b0e; color: var(--text); font: inherit; min-width: 260px; }
+    .row { background: var(--card); border: 1px solid var(--line); border-radius: 12px; padding: 12px 14px; margin-bottom: 12px; }
+    .head { display: flex; justify-content: space-between; gap: 12px; }
+    .pass { color: var(--good); font-weight: 700; }
+    .fail { color: var(--bad); font-weight: 700; }
+    svg { width: 100%; height: auto; display: block; margin-top: 8px; }
+    #live { width: 900px; height: 700px; border: 0; position: fixed; left: -10000px; top: 0; }
+    #live.show { position: static; width: 100%; max-width: 900px; height: 700px; border: 1px solid var(--line); border-radius: 12px; }
+  </style>
+</head>
+<body>
+<main>
+  <h1>Auto-scan browser tests</h1>
+  <div class="sub">Each scenario plays a scripted fake stream through a real &lt;video&gt; with the extension's panel script loaded. A scan should fire exactly once while each card (or card back) is up, and never while cards are moving.</div>
+  <div class="bar">
+    <button id="run">Run all scenarios</button>
+    <label class="sub"><input type="checkbox" id="watch"> watch while running</label>
+    <input id="content" placeholder="panel script to test (default: ../../../content.js)">
+    <span id="state" class="sub"></span>
+  </div>
+  <div id="results"></div>
+  <iframe id="live" title="scenario"></iframe>
+</main>
+<script>
+const SCENARIOS = ["plain", "holo", "holo-back", "sway", "sway-strong"];
+const COLORS = { "card A": "#c9a227", "card B": "#5a6fd0", "back of A": "#1d4fb8" };
+
+function timeline(r) {
+  const W = 900, H = 64, x = (t) => 10 + (t / r.duration) * (W - 20);
+  let s = `<svg viewBox="0 0 ${W} ${H}" role="img" aria-label="${r.title} timeline">`;
+  for (const seg of r.segments) {
+    const fill = COLORS[seg.label] || "#2c2e37";
+    s += `<rect x="${x(seg.from)}" y="14" width="${Math.max(1, x(seg.to) - x(seg.from))}" height="22" rx="3" fill="${fill}" opacity="${seg.scan ? 1 : 0.55}"><title>${seg.label} (${seg.from}-${seg.to}s)</title></rect>`;
+    if (x(seg.to) - x(seg.from) > 60) s += `<text x="${x(seg.from) + 6}" y="29" font-size="11" fill="#fff">${seg.label}</text>`;
+  }
+  for (const sc of r.scans) {
+    const ok = r.segments.some((seg) => seg.scan && seg.label === sc.segment);
+    s += `<g><line x1="${x(sc.at)}" x2="${x(sc.at)}" y1="6" y2="44" stroke="${ok ? "#7ee787" : "#ff8a80"}" stroke-width="3"/><circle cx="${x(sc.at)}" cy="6" r="4" fill="${ok ? "#7ee787" : "#ff8a80"}"/><title>scan at ${sc.at}s (${sc.segment})</title></g>`;
+  }
+  for (let t = 0; t <= r.duration; t += 2) s += `<text x="${x(t)}" y="60" font-size="10" fill="#8b8d98" text-anchor="middle">${t}s</text>`;
+  return s + "</svg>";
+}
+
+function render(r) {
+  const div = document.createElement("div");
+  div.className = "row";
+  const detail = r.perSegment.map((p) => `${p.label}: ${p.scans ? `scanned ${p.delay}s after it appeared` : "missed"}${p.scans > 1 ? ` (+${p.scans - 1} repeat)` : ""}`).join(" · ");
+  div.innerHTML = `<div class="head"><strong>${r.title}</strong><span class="${r.pass ? "pass" : "fail"}">${r.pass ? "PASS" : "FAIL"}</span></div>
+    <div class="sub">${r.about}</div>
+    ${timeline(r)}
+    <div class="sub">${detail}${r.extra ? ` · <span class="fail">${r.extra} extra scan(s)</span>` : ""}</div>`;
+  document.getElementById("results").appendChild(div);
+}
+
+function runOne(name, content) {
+  return new Promise((resolve) => {
+    const frame = document.getElementById("live");
+    const onMsg = (e) => {
+      if (e.data && e.data.type === "scenario-result" && e.data.result.name === name) {
+        window.removeEventListener("message", onMsg);
+        resolve(e.data.result);
+      }
+    };
+    window.addEventListener("message", onMsg);
+    frame.src = `scenario.html?name=${encodeURIComponent(name)}${content ? `&content=${encodeURIComponent(content)}` : ""}&r=${Date.now()}`;
+  });
+}
+
+document.getElementById("run").addEventListener("click", async () => {
+  const btn = document.getElementById("run");
+  const state = document.getElementById("state");
+  const content = document.getElementById("content").value.trim();
+  document.getElementById("live").classList.toggle("show", document.getElementById("watch").checked);
+  btn.disabled = true;
+  document.getElementById("results").innerHTML = "";
+  const all = [];
+  for (const name of SCENARIOS) {
+    state.textContent = `Running ${name}…`;
+    const r = await runOne(name, content);
+    all.push(r);
+    render(r);
+  }
+  window.__results = all;
+  const passed = all.filter((r) => r.pass).length;
+  state.innerHTML = `<span class="${passed === all.length ? "pass" : "fail"}">${passed}/${all.length} scenarios passed</span>`;
+  btn.disabled = false;
+});
+
+if (new URLSearchParams(location.search).has("autorun")) document.getElementById("run").click();
+</script>
+</body>
+</html>

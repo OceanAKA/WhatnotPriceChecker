@@ -7,7 +7,8 @@
     "build": "esbuild src/background.js --bundle --format=iife --platform=browser --target=chrome120 --outfile=../background.js",
     "test": "node test/claude.test.js && node test/gemini.test.js && node test/graded.test.js && node test/ondevice.test.js && node test/worker.test.js",
     "test:prices": "node test/prices.test.js",
-    "package": "npm run build && node scripts/package.mjs"
+    "package": "npm run build && node scripts/package.mjs",
+    "test:browser": "node scripts/serve.mjs"
   },
   "dependencies": {
     "@anthropic-ai/sdk": "latest"
