@@ -58,10 +58,13 @@ ignores the title and reads the card from the video itself.
    printing. If the browser won't expose the video's pixels, it falls back to
    a tab screenshot cropped to the player.
 
-   With **auto-scan** on, a 36×64 grayscale copy of the video is compared a
-   few times a second. A scan fires when the picture has changed noticeably
-   since the last scan (a new card was brought out) and then holds still for
-   0.7 s (it's being shown to the camera); the AI confirms it's a card, and the
+   With **auto-scan** on, a small grayscale copy of the video is sampled four
+   times a second and compared with a running average of recent samples, so
+   the sparkle and flashing of holo and full-art cards average out while a new
+   card shifts the average. A scan fires when the averaged picture differs from
+   the one at the last scan and has stopped moving for about a second. The AI
+   reports whether it is looking at a card's front, its back, or nothing; backs
+   and empty frames are ignored so the last real card stays on screen, and the
    same card shown again isn't re-priced.
 3. **Identify the card.** Every model gets the same system prompt and a JSON
    schema that forces a fixed answer shape (`card_visible`, `name`, `number`,

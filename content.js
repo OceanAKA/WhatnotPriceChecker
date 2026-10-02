@@ -300,12 +300,19 @@
       }
 
       const card = resp.card;
+      // A card back or an empty frame says nothing about price: keep showing the last real card.
+      if (card.card_back || !card.card_visible || !card.name) {
+        status.textContent = card.card_back
+          ? "That's the back of the card. Waiting for the front…"
+          : "No card in view. Scan again when the seller holds one up.";
+        return;
+      }
       const key = `${card.name}|${card.number}|${card.set_total}`.toLowerCase();
-      if (auto && card.card_visible && key === lastCardKey) {
+      if (auto && key === lastCardKey) {
         status.textContent = `Still ${card.name} (checked ${new Date().toLocaleTimeString()}).`;
         return;
       }
-      lastCardKey = card.card_visible ? key : "";
+      lastCardKey = key;
 
       // Show what the AI read right away; prices fill in when they arrive.
       renderSeen(card, frame.image);
@@ -327,10 +334,6 @@
         seen.querySelector(".wnpc-seen-info").appendChild(tip);
       }
       results.innerHTML = "";
-      if (!card.card_visible || !card.name) {
-        status.textContent = "No card in view. Scan again when the seller holds one up.";
-        return;
-      }
 
       status.textContent = "Looking up prices…";
       start = performance.now();
@@ -415,52 +418,70 @@
 
   // ---------- auto-scan: scan when a new card is held up ----------
   //
-  // A tiny grayscale copy of the video is sampled a few times a second. A scan
-  // fires when the picture has changed a lot since the last scan (the seller
-  // brought out something new) and has then held still briefly (they're
-  // showing it to the camera). The AI then confirms whether it's a card, and
-  // the same card shown again is not re-priced.
+  // A tiny grayscale copy of the video is sampled a few times a second and
+  // averaged into coarse blocks. Holo and full-art cards sparkle and flash with
+  // every small hand movement, so each sample is compared with a running
+  // average of recent samples: glints average out, while a new card shifts the
+  // average and keeps it shifted. A scan fires when the averaged picture differs
+  // from the one at the last scan and the live picture has settled near it.
+  // The AI then confirms whether it's a card, and the same card shown again is
+  // not re-priced.
 
   const SAMPLE_W = 36;
   const SAMPLE_H = 64;
+  const BLOCK_W = 3; // coarse grid: 12 x 16 blocks
+  const BLOCK_H = 4;
   const SAMPLE_MS = 250;
-  const STILL_MS = 700; // how long the picture must hold still before scanning
+  const SETTLE_MS = 800; // how long the picture must stay near its average before scanning
   const MIN_GAP_MS = 2500; // between automatic scans
-  const PIXEL_DELTA = 28; // brightness change that counts as "this pixel changed"
-  // A card usually fills only 10-30% of the frame, so a modest share of changed pixels means "new card".
-  const NEW_SCENE = 0.08; // share of pixels changed since the last scan
-  const STILL = 0.05; // at most this share changing between samples counts as held still (allows hand jitter)
+  const AVG_WEIGHT = 0.3; // weight of each new sample in the running average
+  const BLOCK_DELTA = 22; // brightness change that counts as "this block changed"
+  const SETTLED = 0.15; // live vs. average: at most this share of blocks off (sparkle and jitter allowed)
+  // A card usually fills only 10-30% of the frame, so a modest share of changed blocks means "new card".
+  const NEW_SCENE = 0.08; // average now vs. average at the last scan
+  const DRIFT = 0.04; // the average itself may barely move while settling (a moving card keeps shifting it)
   const FALLBACK_MS = 15000; // when the video's pixels can't be read
 
   const sampler = document.createElement("canvas");
   sampler.width = SAMPLE_W;
   sampler.height = SAMPLE_H;
   const sctx = sampler.getContext("2d", { willReadFrequently: true });
+  const GW = SAMPLE_W / BLOCK_W;
+  const GH = SAMPLE_H / BLOCK_H;
 
+  /** Coarse grayscale blocks of the current frame, null if no video, "unreadable" if blocked. */
   function sampleFrame() {
     const stream = findStream();
     if (!stream || stream.video.readyState < 2) return null;
+    let px;
     try {
       sctx.drawImage(stream.video, 0, 0, SAMPLE_W, SAMPLE_H);
-      const px = sctx.getImageData(0, 0, SAMPLE_W, SAMPLE_H).data;
-      const gray = new Uint8Array(SAMPLE_W * SAMPLE_H);
-      for (let i = 0; i < gray.length; i++) gray[i] = (px[i * 4] * 3 + px[i * 4 + 1] * 6 + px[i * 4 + 2]) / 10;
-      return gray;
+      px = sctx.getImageData(0, 0, SAMPLE_W, SAMPLE_H).data;
     } catch {
       return "unreadable";
     }
+    const blocks = new Float32Array(GW * GH);
+    for (let y = 0; y < SAMPLE_H; y++) {
+      for (let x = 0; x < SAMPLE_W; x++) {
+        const i = (y * SAMPLE_W + x) * 4;
+        const gray = (px[i] * 3 + px[i + 1] * 6 + px[i + 2]) / 10;
+        blocks[Math.floor(y / BLOCK_H) * GW + Math.floor(x / BLOCK_W)] += gray / (BLOCK_W * BLOCK_H);
+      }
+    }
+    return blocks;
   }
 
   function changedShare(a, b) {
     let n = 0;
-    for (let i = 0; i < a.length; i++) if (Math.abs(a[i] - b[i]) > PIXEL_DELTA) n++;
+    for (let i = 0; i < a.length; i++) if (Math.abs(a[i] - b[i]) > BLOCK_DELTA) n++;
     return n / a.length;
   }
 
   let autoTimer = null;
-  let prevSample = null;
-  let scannedSample = null;
-  let stillSince = 0;
+  let average = null;
+  let scannedAverage = null;
+  let settledSince = 0;
+  let averageAtSettle = null;
   let lastAutoScan = 0;
 
   function autoTick() {
@@ -476,16 +497,30 @@
       return;
     }
     if (!cur) return;
-    const moving = prevSample ? changedShare(cur, prevSample) > STILL : true;
-    prevSample = cur;
-    if (moving) {
-      stillSince = 0;
+    if (!average) {
+      average = Float32Array.from(cur);
       return;
     }
-    if (!stillSince) stillSince = now;
-    const isNew = !scannedSample || changedShare(cur, scannedSample) > NEW_SCENE;
-    if (isNew && now - stillSince >= STILL_MS && now - lastAutoScan >= MIN_GAP_MS) {
-      scannedSample = cur;
+    const settled = changedShare(cur, average) <= SETTLED;
+    for (let i = 0; i < cur.length; i++) average[i] += AVG_WEIGHT * (cur[i] - average[i]);
+    if (!settled) {
+      settledSince = 0;
+      return;
+    }
+    if (!settledSince) {
+      settledSince = now;
+      averageAtSettle = Float32Array.from(average);
+      return;
+    }
+    if (changedShare(average, averageAtSettle) > DRIFT) {
+      // Still drifting (the card is moving): restart the settle window from here.
+      settledSince = now;
+      averageAtSettle = Float32Array.from(average);
+      return;
+    }
+    const isNew = !scannedAverage || changedShare(average, scannedAverage) > NEW_SCENE;
+    if (isNew && now - settledSince >= SETTLE_MS && now - lastAutoScan >= MIN_GAP_MS) {
+      scannedAverage = Float32Array.from(average);
       lastAutoScan = now;
       scan({ auto: true });
     }
@@ -494,8 +529,8 @@
   autoBox.addEventListener("change", () => {
     clearInterval(autoTimer);
     lastCardKey = "";
-    prevSample = scannedSample = null;
-    stillSince = lastAutoScan = 0;
+    average = scannedAverage = averageAtSettle = null;
+    settledSince = lastAutoScan = 0;
     if (autoBox.checked) {
       status.textContent = "Auto-scan on: hold a card up to the camera.";
       autoTimer = setInterval(autoTick, SAMPLE_MS);

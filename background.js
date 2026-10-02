@@ -17247,7 +17247,11 @@ Please migrate to a newer model. Visit https://docs.anthropic.com/en/docs/resour
     properties: {
       card_visible: {
         type: "boolean",
-        description: "True if a single Pokemon card is clearly the focus of the frame."
+        description: "True if the front of a single Pokemon card is clearly the focus of the frame."
+      },
+      card_back: {
+        type: "boolean",
+        description: "True if the card being shown is turned around so its back (the blue Poke Ball design) faces the camera. Then card_visible is false and the other fields are empty."
       },
       name: {
         type: "string",
@@ -17292,6 +17296,7 @@ Please migrate to a newer model. Visit https://docs.anthropic.com/en/docs/resour
     },
     required: [
       "card_visible",
+      "card_back",
       "name",
       "number_legible",
       "number",
@@ -17831,7 +17836,7 @@ Identify the card in this frame.` : "Identify the card in this frame.";
 
   // src/tcgcsv.js
   var DIRECT = "https://tcgcsv.com/tcgplayer";
-  var USER_AGENT = "WhatnotPriceChecker/3.2.3 (+https://github.com/OceanAKA/WhatnotPriceChecker)";
+  var USER_AGENT = "WhatnotPriceChecker/3.2.4 (+https://github.com/OceanAKA/WhatnotPriceChecker)";
   var base = DIRECT;
   function setTcgcsvBase(url) {
     base = url || DIRECT;
@@ -18413,6 +18418,7 @@ Identify the card in this frame.` : "Identify the card in this frame.";
       }
       case "price": {
         const card = msg.card;
+        if (card.card_back || !card.card_visible || !card.name) return { ok: true, cards: [], priceLanguage: "English", graded: null };
         let result;
         try {
           const numberOk = card.number_legible !== false;

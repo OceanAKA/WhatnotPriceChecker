@@ -5,7 +5,11 @@ export const CARD_SCHEMA = {
   properties: {
     card_visible: {
       type: "boolean",
-      description: "True if a single Pokemon card is clearly the focus of the frame.",
+      description: "True if the front of a single Pokemon card is clearly the focus of the frame.",
+    },
+    card_back: {
+      type: "boolean",
+      description: "True if the card being shown is turned around so its back (the blue Poke Ball design) faces the camera. Then card_visible is false and the other fields are empty.",
     },
     name: {
       type: "string",
@@ -49,7 +53,7 @@ export const CARD_SCHEMA = {
     },
   },
   required: [
-    "card_visible", "name", "number_legible", "number", "set_total", "set_code", "set_name",
+    "card_visible", "card_back", "name", "number_legible", "number", "set_total", "set_code", "set_name",
     "language", "graded", "grade_label", "confidence",
   ],
   additionalProperties: false,

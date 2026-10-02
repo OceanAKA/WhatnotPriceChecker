@@ -246,6 +246,7 @@ async function handle(msg, sender) {
     }
     case "price": {
       const card = msg.card;
+      if (card.card_back || !card.card_visible || !card.name) return { ok: true, cards: [], priceLanguage: "English", graded: null };
       let result;
       try {
         // An unreadable number is a guess; price by name and set instead and list every printing.
