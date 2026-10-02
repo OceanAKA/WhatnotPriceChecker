@@ -302,9 +302,12 @@
       const card = resp.card;
       // A card back or an empty frame says nothing about price: keep showing the last real card.
       if (card.card_back || !card.card_visible || !card.name) {
+        const when = auto ? ` (${new Date().toLocaleTimeString()})` : "";
         status.textContent = card.card_back
-          ? "That's the back of the card. Waiting for the front…"
-          : "No card in view. Scan again when the seller holds one up.";
+          ? `That's the back of the card. Waiting for the front…${when}`
+          : auto
+            ? `No card recognized${when}.`
+            : "No card in view. Scan again when the seller holds one up.";
         return;
       }
       const key = `${card.name}|${card.number}|${card.set_total}`.toLowerCase();
@@ -423,7 +426,8 @@
   // every small hand movement, so each sample is compared with a running
   // average of recent samples: glints average out, while a new card shifts the
   // average and keeps it shifted. A scan fires when the averaged picture differs
-  // from the one at the last scan and the live picture has settled near it.
+  // from the one at the last scan and the live picture has settled near it, or,
+  // for a card that keeps swaying in the hand, once it has been up for a few seconds.
   // The AI then confirms whether it's a card, and the same card shown again is
   // not re-priced.
 
@@ -440,6 +444,10 @@
   // A card usually fills only 10-30% of the frame, so a modest share of changed blocks means "new card".
   const NEW_SCENE = 0.08; // average now vs. average at the last scan
   const DRIFT = 0.04; // the average itself may barely move while settling (a moving card keeps shifting it)
+  // A swaying hand-held card may never settle: once a new card has been on screen
+  // this long, scan anyway. "New" is judged on a 6x8 grid so sway doesn't count.
+  const PERSIST_MS = 3500;
+  const NEW_COARSE = 0.1;
   const FALLBACK_MS = 15000; // when the video's pixels can't be read
 
   const sampler = document.createElement("canvas");
@@ -471,6 +479,13 @@
     return blocks;
   }
 
+  /** 12x16 blocks -> 6x8 blocks (2x2 averages), coarse enough that a few cm of sway barely changes it. */
+  function coarser(a) {
+    const out = new Float32Array((GW / 2) * (GH / 2));
+    for (let y = 0; y < GH; y++) for (let x = 0; x < GW; x++) out[(y >> 1) * (GW / 2) + (x >> 1)] += a[y * GW + x] / 4;
+    return out;
+  }
+
   function changedShare(a, b) {
     let n = 0;
     for (let i = 0; i < a.length; i++) if (Math.abs(a[i] - b[i]) > BLOCK_DELTA) n++;
@@ -483,6 +498,14 @@
   let settledSince = 0;
   let averageAtSettle = null;
   let lastAutoScan = 0;
+  let newSince = 0;
+
+  function triggerAutoScan(now) {
+    scannedAverage = Float32Array.from(average);
+    lastAutoScan = now;
+    newSince = 0;
+    scan({ auto: true });
+  }
 
   function autoTick() {
     if (document.visibilityState !== "visible" || busy) return;
@@ -503,6 +526,15 @@
     }
     const settled = changedShare(cur, average) <= SETTLED;
     for (let i = 0; i < cur.length; i++) average[i] += AVG_WEIGHT * (cur[i] - average[i]);
+
+    const newCoarse = !scannedAverage || changedShare(coarser(average), coarser(scannedAverage)) > NEW_COARSE;
+    if (!newCoarse) newSince = 0;
+    else if (!newSince) newSince = now;
+    if (newSince && now - newSince >= PERSIST_MS && now - lastAutoScan >= MIN_GAP_MS) {
+      triggerAutoScan(now);
+      return;
+    }
+
     if (!settled) {
       settledSince = 0;
       return;
@@ -519,18 +551,14 @@
       return;
     }
     const isNew = !scannedAverage || changedShare(average, scannedAverage) > NEW_SCENE;
-    if (isNew && now - settledSince >= SETTLE_MS && now - lastAutoScan >= MIN_GAP_MS) {
-      scannedAverage = Float32Array.from(average);
-      lastAutoScan = now;
-      scan({ auto: true });
-    }
+    if (isNew && now - settledSince >= SETTLE_MS && now - lastAutoScan >= MIN_GAP_MS) triggerAutoScan(now);
   }
 
   autoBox.addEventListener("change", () => {
     clearInterval(autoTimer);
     lastCardKey = "";
     average = scannedAverage = averageAtSettle = null;
-    settledSince = lastAutoScan = 0;
+    settledSince = lastAutoScan = newSince = 0;
     if (autoBox.checked) {
       status.textContent = "Auto-scan on: hold a card up to the camera.";
       autoTimer = setInterval(autoTick, SAMPLE_MS);
